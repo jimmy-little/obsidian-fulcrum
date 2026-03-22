@@ -148,6 +148,17 @@ export function formatFulcrumProjectLogLine(text: string): string {
 	return `- <!-- fulcrum-log:${sortMs} -->${stamp} — ${trimmed}`;
 }
 
+/** Wikilink uses the project note basename (Obsidian link target). */
+export function formatProjectReviewLogMessage(
+	projectBasename: string,
+	optionalNote: string,
+): string {
+	const bn = projectBasename.replace(/\.md$/i, "");
+	const link = `[[${bn}]]`;
+	const note = optionalNote.replace(/\s+/g, " ").trim();
+	return note.length > 0 ? `Reviewed ${link} - ${note}` : `Reviewed ${link}`;
+}
+
 function parseProjectLogLineCore(line: string): {
 	sortMs: number | null;
 	title: string;

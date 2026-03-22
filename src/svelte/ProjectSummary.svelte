@@ -103,15 +103,8 @@
 		}
 	}
 
-	async function markReviewed(): Promise<void> {
-		if (logBusy) return;
-		logBusy = true;
-		try {
-			await plugin.markProjectReviewed(projectPath);
-			await loadLogActivity();
-		} finally {
-			logBusy = false;
-		}
+	function markReviewed(): void {
+		plugin.openMarkReviewedModal(projectPath, () => void loadLogActivity());
 	}
 
 	$: nextUpItems = rollup ? buildNextUpItems(rollup, doneTask, 8) : [];
@@ -121,6 +114,7 @@
 	$: activityRows = rollup
 		? buildActivityRowModels(rollup, logEntries, {
 				projectPath,
+				doneTask,
 				openPath,
 				openTask: (t) => plugin.openIndexedTask(t),
 				formatTracked: formatTrackedMinutesShort,
@@ -174,13 +168,13 @@
 
 	$: statusKind = rollup ? statusPillKind(rollup.project.status) : "neutral";
 
-	function stubNewNote(): void {
-		plugin.notifyNewNoteFromProject(projectPath);
+	function markProjectComplete(): void {
+		plugin.openMarkProjectCompleteModal(projectPath);
 	}
 
-	function stubNewTask(): void {
-		plugin.notifyNewTaskFromProject(projectPath);
-	}
+	$: taskSourceMode = plugin.settings.taskSourceMode;
+	$: showNewInlineTaskBtn = taskSourceMode === "obsidianTasks" || taskSourceMode === "both";
+	$: showNewTaskNoteBtn = taskSourceMode === "taskNotes" || taskSourceMode === "both";
 </script>
 
 {#if rollupMissing}
@@ -231,16 +225,12 @@
 							<button
 								type="button"
 								class="fulcrum-banner-btn"
-								on:click={() => void markReviewed()}
-								disabled={logBusy}
+								on:click={markReviewed}
 							>
 								Mark reviewed
 							</button>
-							<button type="button" class="fulcrum-banner-btn" on:click={stubNewTask}>
-								New task
-							</button>
-							<button type="button" class="fulcrum-banner-btn" on:click={stubNewNote}>
-								New note
+							<button type="button" class="fulcrum-banner-btn" on:click={markProjectComplete}>
+								Mark complete
 							</button>
 						</div>
 					</div>
@@ -351,10 +341,31 @@
 		</section>
 
 		<section class="fulcrum-section">
-			<h2>Tasks</h2>
-			<p class="fulcrum-muted fulcrum-section__lede">
-				Task notes and checklist tasks linked to this project that are still open (status not done, no completion date). Finished items appear in Activity.
-			</p>
+			<div class="fulcrum-section-head">
+				<h2 class="fulcrum-section-head__title">Tasks</h2>
+				{#if showNewInlineTaskBtn || showNewTaskNoteBtn}
+					<div class="fulcrum-section-head__actions">
+						{#if showNewInlineTaskBtn}
+							<button
+								type="button"
+								class="fulcrum-text-action"
+								on:click={() => plugin.openNewInlineTaskForProject(projectPath)}
+							>
+								New Task
+							</button>
+						{/if}
+						{#if showNewTaskNoteBtn}
+							<button
+								type="button"
+								class="fulcrum-text-action"
+								on:click={() => plugin.openTaskNoteCreateForProject(projectPath)}
+							>
+								New TaskNote
+							</button>
+						{/if}
+					</div>
+				{/if}
+			</div>
 			{#if rollup.tasks.length === 0}
 				<p class="fulcrum-muted">No tasks in your indexed sources link to this project.</p>
 			{:else if openTasks.length === 0}

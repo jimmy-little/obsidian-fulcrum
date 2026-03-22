@@ -2,13 +2,19 @@ import {Notice, Platform, Plugin, TFile, type WorkspaceLeaf} from "obsidian";
 import {
 	appendFulcrumProjectLog,
 	formatFulcrumProjectLogLine,
-	markProjectReviewDates,
 	parseProjectLogLines,
 	readFulcrumLogTail,
 	type ProjectLogActivityEntry,
 } from "./fulcrum/projectNote";
 import {FULCRUM_HOVER_SOURCE, VIEW_DASHBOARD, VIEW_PROJECT, VIEW_PROJECT_MANAGER} from "./fulcrum/constants";
-import {LinkMeetingModal, NewProjectModal, ProjectPickerModal} from "./fulcrum/modals";
+import {
+	LinkMeetingModal,
+	MarkProjectCompleteModal,
+	MarkReviewedModal,
+	NewInlineTaskModal,
+	NewProjectModal,
+	ProjectPickerModal,
+} from "./fulcrum/modals";
 import type {FulcrumHost} from "./fulcrum/pluginBridge";
 import {openProjectSummaryLeaf, revealOrCreateDashboard} from "./fulcrum/openViews";
 import {DEFAULT_SETTINGS, type FulcrumSettings} from "./fulcrum/settingsDefaults";
@@ -324,20 +330,18 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 		}
 	}
 
-	async markProjectReviewed(projectPath: string): Promise<void> {
-		const f = this.app.vault.getAbstractFileByPath(projectPath);
-		if (!(f instanceof TFile)) {
-			new Notice("Project file not found.");
-			return;
-		}
-		try {
-			await markProjectReviewDates(this.app, f, this.settings);
-			await this.vaultIndex.rebuild();
-			new Notice("Review dates updated.");
-		} catch (e) {
-			console.error(e);
-			new Notice("Could not update review fields.");
-		}
+	openMarkReviewedModal(
+		projectPath: string,
+		onComplete?: () => void | Promise<void>,
+	): void {
+		new MarkReviewedModal(this.app, this, projectPath, onComplete).open();
+	}
+
+	openMarkProjectCompleteModal(
+		projectPath: string,
+		onComplete?: () => void | Promise<void>,
+	): void {
+		new MarkProjectCompleteModal(this.app, this, projectPath, onComplete).open();
 	}
 
 	async loadProjectLogPreview(projectPath: string): Promise<string[]> {
@@ -363,12 +367,67 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 		return parseProjectLogLines(raw, f.stat.mtime);
 	}
 
-	notifyNewNoteFromProject(_projectPath: string): void {
-		new Notice("New note from project will be available in a future update.");
+	openNewInlineTaskForProject(projectPath: string): void {
+		const f = this.app.vault.getAbstractFileByPath(projectPath);
+		if (!(f instanceof TFile)) {
+			new Notice("Project file not found.");
+			return;
+		}
+		const tag = this.settings.taskTag.trim() || "task";
+		new NewInlineTaskModal(this.app, f, tag, (title) => {
+			void this.appendInlineTaskToProjectNote(f, title);
+		}).open();
 	}
 
-	notifyNewTaskFromProject(_projectPath: string): void {
-		new Notice("New task from project will be available in a future update.");
+	private async appendInlineTaskToProjectNote(projectFile: TFile, title: string): Promise<void> {
+		const tag = this.settings.taskTag.trim() || "task";
+		const linktext =
+			this.app.metadataCache.fileToLinktext(projectFile, projectFile.path, false) ??
+			projectFile.basename.replace(/\.md$/i, "");
+		const line = `- [ ] ${title} #${tag} [[${linktext}]]`;
+		try {
+			const body = await this.app.vault.read(projectFile);
+			const trimmed = body.replace(/\s*$/, "");
+			const addition = `${trimmed.length > 0 ? "\n\n" : ""}${line}\n`;
+			await this.app.vault.modify(projectFile, trimmed + addition);
+			this.vaultIndex.scheduleRebuild();
+			new Notice("Task added to project note.");
+		} catch (e) {
+			console.error(e);
+			new Notice("Could not update the project note.");
+		}
 	}
 
+	openTaskNoteCreateForProject(projectPath: string): void {
+		const projectFile = this.app.vault.getAbstractFileByPath(projectPath);
+		if (!(projectFile instanceof TFile)) {
+			new Notice("Project file not found.");
+			return;
+		}
+		const linktext =
+			this.app.metadataCache.fileToLinktext(projectFile, projectPath, false) ??
+			projectFile.basename.replace(/\.md$/i, "");
+		const projectWiki = `[[${linktext}]]`;
+		const taskTag = this.settings.taskTag.trim() || "task";
+
+		type TaskNotesPlugin = {openTaskCreationModal?: (v?: Record<string, unknown>) => void};
+		const raw = (
+			this.app as unknown as {plugins?: {plugins?: Record<string, unknown>}}
+		).plugins?.plugins?.["tasknotes"] as TaskNotesPlugin | undefined;
+
+		if (raw?.openTaskCreationModal) {
+			raw.openTaskCreationModal({
+				projects: [projectWiki],
+				tags: [taskTag],
+			});
+			return;
+		}
+
+		const cmd = (
+			this.app as unknown as {commands?: {executeCommandById(id: string): boolean}}
+		).commands;
+		if (!cmd?.executeCommandById("tasknotes:create-new-task")) {
+			new Notice("Enable the TaskNotes plugin to create task notes from here.");
+		}
+	}
 }

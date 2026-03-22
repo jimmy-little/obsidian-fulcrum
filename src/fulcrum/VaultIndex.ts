@@ -504,9 +504,20 @@ export class VaultIndex {
 
 		let meetingOnlyMinutes = 0;
 		for (const m of meetings) {
-			if (atomicPaths.has(m.file.path)) continue;
-			if (m.totalMinutesTracked != null) meetingOnlyMinutes += m.totalMinutesTracked;
-			else if (m.duration != null) meetingOnlyMinutes += m.duration;
+			const dur =
+				m.duration != null && Number.isFinite(m.duration) ? m.duration : 0;
+			const trackedPresent =
+				m.totalMinutesTracked != null && Number.isFinite(m.totalMinutesTracked);
+			const tracked = trackedPresent ? m.totalMinutesTracked! : 0;
+			// Actual tracked time wins; duration is a pre-meeting estimate fallback only.
+			const meetingMinutes = trackedPresent ? tracked : dur;
+
+			if (atomicPaths.has(m.file.path)) {
+				// Atomic row already summed readTrackedMinutesFromFm when keys align.
+				if (!trackedPresent) meetingOnlyMinutes += meetingMinutes;
+			} else {
+				meetingOnlyMinutes += meetingMinutes;
+			}
 		}
 
 		const aggregatedTrackedMinutes =

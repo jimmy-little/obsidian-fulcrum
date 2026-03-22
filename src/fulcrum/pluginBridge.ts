@@ -13,11 +13,22 @@ export interface FulcrumHost {
 	openDashboard(): Promise<void>;
 	refreshIndex(): Promise<void>;
 	appendProjectLogEntry(projectPath: string, text: string): Promise<void>;
-	markProjectReviewed(projectPath: string): Promise<void>;
+	/** Opens modal: optional review note, updates review dates, appends Fulcrum log line. */
+	openMarkReviewedModal(
+		projectPath: string,
+		onComplete?: () => void | Promise<void>,
+	): void;
+	/** Confirm, optional note → done status, log line, move to completed folder, return to dashboard. */
+	openMarkProjectCompleteModal(
+		projectPath: string,
+		onComplete?: () => void | Promise<void>,
+	): void;
 	loadProjectLogPreview(projectPath: string): Promise<string[]>;
 	loadProjectLogActivity(projectPath: string): Promise<ProjectLogActivityEntry[]>;
-	notifyNewNoteFromProject(projectPath: string): void;
-	notifyNewTaskFromProject(projectPath: string): void;
+	/** Append `- [ ] title #tag [[project]]` to the project note (Obsidian Tasks / inline source). */
+	openNewInlineTaskForProject(projectPath: string): void;
+	/** TaskNotes “Create new task” with project pre-filled when the plugin exposes it. */
+	openTaskNoteCreateForProject(projectPath: string): void;
 	openIndexedTask(task: IndexedTask): void;
 	toggleIndexedTask(task: IndexedTask): Promise<void>;
 	patchSettings(partial: Partial<FulcrumSettings>): Promise<void>;

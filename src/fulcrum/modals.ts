@@ -6,7 +6,15 @@ import {
 	Setting,
 	TFile,
 } from "obsidian";
+import {markProjectCompleteAndMove} from "./projectCompletion";
+import {
+	appendFulcrumProjectLog,
+	formatFulcrumProjectLogLine,
+	formatProjectReviewLogMessage,
+	markProjectReviewDates,
+} from "./projectNote";
 import type {FulcrumHost} from "./pluginBridge";
+import {parseList} from "./settingsDefaults";
 import type {IndexedProject} from "./types";
 
 export class ProjectPickerModal extends FuzzySuggestModal<IndexedProject> {
@@ -167,6 +175,213 @@ export class LinkMeetingModal extends FuzzySuggestModal<IndexedProject> {
 			new Notice("Could not update frontmatter.");
 		} finally {
 			this.close();
+		}
+	}
+}
+
+/** Modal to capture title before appending a checkbox line to the project note. */
+export class NewInlineTaskModal extends Modal {
+	private titleValue = "";
+
+	constructor(
+		app: App,
+		private readonly projectFile: TFile,
+		private readonly taskTag: string,
+		private readonly onSubmitTitle: (title: string) => void,
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const {contentEl} = this;
+		contentEl.empty();
+		contentEl.createEl("h2", {text: "New task"});
+		const tag = this.taskTag.trim() || "task";
+		contentEl.createEl("p", {
+			cls: "fulcrum-muted",
+			text: `Adds an open task to the bottom of this project note with #${tag} and a wikilink to the project.`,
+		});
+
+		new Setting(contentEl)
+			.setName("Title")
+			.addText((t) => {
+				t.setPlaceholder("What needs doing?");
+				t.onChange((v) => {
+					this.titleValue = v;
+				});
+			});
+
+		new Setting(contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()));
+
+		new Setting(contentEl).addButton((b) =>
+			b
+				.setButtonText("Add to project note")
+				.setCta()
+				.onClick(() => this.submit()),
+		);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+
+	private submit(): void {
+		const t = this.titleValue.trim().replace(/\n/g, " ");
+		if (!t) {
+			new Notice("Enter a task title.");
+			return;
+		}
+		this.close();
+		this.onSubmitTitle(t);
+	}
+}
+
+export class MarkReviewedModal extends Modal {
+	private note = "";
+
+	constructor(
+		app: App,
+		private readonly host: FulcrumHost,
+		private readonly projectPath: string,
+		private readonly onComplete?: () => void | Promise<void>,
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const {contentEl} = this;
+		contentEl.empty();
+		contentEl.createEl("h2", {text: "Mark reviewed"});
+		contentEl.createEl("p", {
+			cls: "fulcrum-muted",
+			text: "Updates last reviewed to today and sets the next review date using this project’s review frequency (or your default). An optional note is appended to the project log.",
+		});
+
+		new Setting(contentEl)
+			.setName("Review note")
+			.setDesc("Optional. Shown in the project log after the review line.")
+			.addTextArea((ta) => {
+				ta.setPlaceholder("e.g. priorities confirmed, no blockers");
+				ta.inputEl.rows = 3;
+				ta.onChange((v) => {
+					this.note = v;
+				});
+			});
+
+		new Setting(contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()));
+
+		new Setting(contentEl).addButton((b) =>
+			b
+				.setButtonText("Mark reviewed")
+				.setCta()
+				.onClick(() => {
+					void this.submit();
+				}),
+		);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+
+	private async submit(): Promise<void> {
+		const f = this.app.vault.getAbstractFileByPath(this.projectPath);
+		if (!(f instanceof TFile)) {
+			new Notice("Project file not found.");
+			return;
+		}
+		try {
+			await markProjectReviewDates(this.app, f, this.host.settings);
+			const logBody = formatFulcrumProjectLogLine(
+				formatProjectReviewLogMessage(f.basename, this.note),
+			);
+			await appendFulcrumProjectLog(
+				this.app,
+				f,
+				this.host.settings.projectLogSectionHeading,
+				logBody,
+			);
+			await this.host.vaultIndex.rebuild();
+			new Notice("Review dates updated and log entry added.");
+			this.close();
+			await this.onComplete?.();
+		} catch (e) {
+			console.error(e);
+			new Notice("Could not mark reviewed or write the log.");
+		}
+	}
+}
+
+export class MarkProjectCompleteModal extends Modal {
+	private note = "";
+
+	constructor(
+		app: App,
+		private readonly host: FulcrumHost,
+		private readonly projectPath: string,
+		private readonly onComplete?: () => void | Promise<void>,
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const {contentEl} = this;
+		contentEl.empty();
+		contentEl.createEl("h2", {text: "Mark project complete?"});
+		const dest = this.host.settings.completedProjectsFolder.trim() || "(not set)";
+		contentEl.createEl("p", {
+			cls: "fulcrum-muted",
+			text: `This sets the project’s status to your first “done” status (${this.doneStatusLabel()}) in frontmatter, appends a log line, and moves the note to: ${dest}`,
+		});
+
+		new Setting(contentEl)
+			.setName("Completion note")
+			.setDesc("Optional. Appended to the project log before the file is moved.")
+			.addTextArea((ta) => {
+				ta.setPlaceholder("e.g. shipped v1, handed off to ops");
+				ta.inputEl.rows = 3;
+				ta.onChange((v) => {
+					this.note = v;
+				});
+			});
+
+		new Setting(contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()));
+
+		new Setting(contentEl).addButton((b) =>
+			b
+				.setButtonText("Yes, complete")
+				.setCta()
+				.onClick(() => {
+					void this.submit();
+				}),
+		);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+
+	private doneStatusLabel(): string {
+		return parseList(this.host.settings.projectDoneStatuses)[0] ?? "completed";
+	}
+
+	private async submit(): Promise<void> {
+		const f = this.app.vault.getAbstractFileByPath(this.projectPath);
+		if (!(f instanceof TFile)) {
+			new Notice("Project file not found.");
+			return;
+		}
+		try {
+			await markProjectCompleteAndMove(this.app, f, this.host.settings, {note: this.note});
+			await this.host.vaultIndex.rebuild();
+			await this.host.openDashboard();
+			new Notice("Project marked complete and moved.");
+			this.close();
+			await this.onComplete?.();
+		} catch (e) {
+			console.error(e);
+			const msg = e instanceof Error ? e.message : String(e);
+			new Notice(msg.length < 120 ? msg : "Could not complete project or move the file.");
 		}
 	}
 }

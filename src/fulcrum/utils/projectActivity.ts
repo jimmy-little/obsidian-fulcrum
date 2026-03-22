@@ -82,6 +82,10 @@ export function incompleteProjectTasks(tasks: IndexedTask[], doneTask: Set<strin
 	);
 }
 
+export function taskIsComplete(t: IndexedTask, doneTask: Set<string>): boolean {
+	return doneTask.has(t.status) || Boolean(t.completedDate?.trim());
+}
+
 /**
  * Next up: incomplete tasks with due or scheduled **today or later**, and notes whose primary date is **today or later** — ascending by that date.
  */
@@ -111,6 +115,7 @@ export function buildActivityRowModels(
 	logEntries: ProjectLogActivityEntry[],
 	deps: {
 		projectPath: string;
+		doneTask: Set<string>;
 		openPath: (path: string) => void;
 		openTask: (t: IndexedTask) => void;
 		formatTracked: (n: number) => string;
@@ -129,6 +134,7 @@ export function buildActivityRowModels(
 		});
 	}
 	for (const t of rollup.tasks) {
+		if (!taskIsComplete(t, deps.doneTask)) continue;
 		items.push({
 			id: `task:${t.file.path}:${t.line ?? 0}:${t.title.slice(0, 80)}`,
 			kind: "task",

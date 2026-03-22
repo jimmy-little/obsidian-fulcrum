@@ -151,7 +151,9 @@
 					{/if}
 				</div>
 			{/if}
-			<span class="fulcrum-task-card__created-age">{formatTaskCreatedAge(task.createdAtMs)}</span>
+			{#if task.source === "taskNote"}
+				<span class="fulcrum-task-card__created-age">{formatTaskCreatedAge(task.createdAtMs)}</span>
+			{/if}
 		</div>
 	</div>
 </div>
