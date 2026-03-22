@@ -2,6 +2,7 @@ import type {App, WorkspaceLeaf} from "obsidian";
 import type {FulcrumSettings} from "./settingsDefaults";
 import type {VaultIndex} from "./VaultIndex";
 import type {IndexedTask} from "./types";
+import type {ProjectLogActivityEntry} from "./projectNote";
 
 /** Narrow surface passed into Svelte views (avoids circular imports). */
 export interface FulcrumHost {
@@ -14,6 +15,7 @@ export interface FulcrumHost {
 	appendProjectLogEntry(projectPath: string, text: string): Promise<void>;
 	markProjectReviewed(projectPath: string): Promise<void>;
 	loadProjectLogPreview(projectPath: string): Promise<string[]>;
+	loadProjectLogActivity(projectPath: string): Promise<ProjectLogActivityEntry[]>;
 	notifyNewNoteFromProject(projectPath: string): void;
 	notifyNewTaskFromProject(projectPath: string): void;
 	openIndexedTask(task: IndexedTask): void;

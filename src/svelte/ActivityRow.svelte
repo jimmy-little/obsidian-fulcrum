@@ -1,0 +1,120 @@
+<script lang="ts">
+	import type {WorkspaceLeaf} from "obsidian";
+	import type {FulcrumHost} from "../fulcrum/pluginBridge";
+
+	export let title: string;
+	export let chips: string[] = [];
+	export let kind: "note" | "task" | "log" | "meeting";
+	/** Invoked when the row is activated (click). */
+	export let whenClick: () => void;
+	export let plugin: FulcrumHost;
+	export let hoverParentLeaf: WorkspaceLeaf | undefined = undefined;
+	export let hoverPath: string | undefined = undefined;
+	/** Project Activity uses a left timeline rail; Next up rows stay plain. */
+	export let variant: "default" | "timeline" = "default";
+
+	function onHover(ev: MouseEvent): void {
+		if (!hoverPath || !hoverParentLeaf) return;
+		plugin.triggerFulcrumHoverLink(
+			ev,
+			hoverParentLeaf,
+			ev.currentTarget as HTMLElement,
+			hoverPath,
+		);
+	}
+
+	function onRowKeydown(ev: KeyboardEvent): void {
+		if (ev.key !== "Enter" && ev.key !== " ") return;
+		ev.preventDefault();
+		whenClick();
+	}
+</script>
+
+<div
+	role="button"
+	tabindex="0"
+	class="fulcrum-activity-row"
+	class:fulcrum-activity-row--timeline={variant === "timeline"}
+	data-fulcrum-activity-kind={kind}
+	on:click={whenClick}
+	on:keydown={onRowKeydown}
+	on:mouseenter={onHover}
+>
+	{#if variant === "timeline"}
+		<div class="fulcrum-activity-timeline__track" aria-hidden="true">
+			<div class="fulcrum-activity-timeline__stem fulcrum-activity-timeline__stem--before"></div>
+			<div class="fulcrum-activity-timeline__node">
+				{#if kind === "task"}
+					<svg class="fulcrum-activity-timeline__icon" viewBox="0 0 24 24" aria-hidden="true">
+						<path
+							d="M20 6 9 17l-5-5"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.25"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+				{:else if kind === "meeting"}
+					<svg class="fulcrum-activity-timeline__icon" viewBox="0 0 24 24" aria-hidden="true">
+						<rect
+							x="3"
+							y="4"
+							width="18"
+							height="18"
+							rx="2"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						/>
+						<path d="M16 2v4M8 2v4M3 10h18" fill="none" stroke="currentColor" stroke-width="2" />
+					</svg>
+				{:else if kind === "log"}
+					<svg class="fulcrum-activity-timeline__icon" viewBox="0 0 24 24" aria-hidden="true">
+						<rect
+							x="3"
+							y="4"
+							width="12"
+							height="16"
+							rx="2"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						/>
+						<path d="M6 9h6M6 13h6M6 17h5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+						<path
+							d="m16 3 5 5-7 7H9v-4l7-7Z"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linejoin="round"
+						/>
+					</svg>
+				{:else}
+					<svg class="fulcrum-activity-timeline__icon" viewBox="0 0 24 24" aria-hidden="true">
+						<path
+							d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2Z"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linejoin="round"
+						/>
+						<path d="M14 2v6h6" fill="none" stroke="currentColor" stroke-width="2" />
+						<path d="M8 13h8M8 17h8M8 9h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+					</svg>
+				{/if}
+			</div>
+			<div class="fulcrum-activity-timeline__stem fulcrum-activity-timeline__stem--after"></div>
+		</div>
+	{/if}
+	<div class="fulcrum-activity-row__body">
+		<div class="fulcrum-activity-row__title">{title}</div>
+		{#if chips.length > 0}
+			<div class="fulcrum-activity-row__meta">
+				{#each chips as c}
+					<span class="fulcrum-activity-meta">{c}</span>
+				{/each}
+			</div>
+		{/if}
+	</div>
+</div>

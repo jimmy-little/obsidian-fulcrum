@@ -124,3 +124,101 @@ export function readProjectPageMeta(
 		description: fmString(fm, "description"),
 	};
 }
+
+/** Parsed project log line for activity feeds (newest-first). */
+export interface ProjectLogActivityEntry {
+	sortMs: number;
+	title: string;
+	stampLabel: string;
+	rawLine: string;
+}
+
+/**
+ * Append a bullet line with an HTML comment timestamp so entries sort reliably in the Activity view.
+ * Human-readable stamp and message remain in the note for reading outside Fulcrum.
+ */
+export function formatFulcrumProjectLogLine(text: string): string {
+	const trimmed = text.replace(/\s+/g, " ").trim();
+	const d = new Date();
+	const sortMs = d.getTime();
+	const stamp = d.toLocaleString(undefined, {
+		dateStyle: "short",
+		timeStyle: "short",
+	});
+	return `- <!-- fulcrum-log:${sortMs} -->${stamp} — ${trimmed}`;
+}
+
+function parseProjectLogLineCore(line: string): {
+	sortMs: number | null;
+	title: string;
+	stampLabel: string;
+	rawLine: string;
+} | null {
+	const t = line.trim();
+	const newFmt = t.match(/^[-*]\s*<!--\s*fulcrum-log:(\d+)\s*-->\s*(.*)$/);
+	if (newFmt?.[1] != null && newFmt[2] != null) {
+		const ms = Number(newFmt[1]);
+		const rest = newFmt[2].trim();
+		const sep = rest.indexOf(" — ");
+		if (sep === -1) {
+			return {
+				sortMs: Number.isFinite(ms) ? ms : null,
+				title: rest || "Log entry",
+				stampLabel: "",
+				rawLine: line,
+			};
+		}
+		const stampLabel = rest.slice(0, sep).trim();
+		const title = rest.slice(sep + 3).trim() || stampLabel || "Log entry";
+		return {
+			sortMs: Number.isFinite(ms) ? ms : null,
+			title,
+			stampLabel,
+			rawLine: line,
+		};
+	}
+	const legacy = t.match(/^[-*]\s*(.+?)\s+—\s+(.+)$/);
+	if (legacy?.[1] != null && legacy[2] != null) {
+		return {
+			sortMs: null,
+			title: legacy[2].trim(),
+			stampLabel: legacy[1].trim(),
+			rawLine: line,
+		};
+	}
+	if (/^[-*]\s*\S/.test(t)) {
+		return {
+			sortMs: null,
+			title: t.replace(/^[-*]\s+/, "").trim(),
+			stampLabel: "",
+			rawLine: line,
+		};
+	}
+	return null;
+}
+
+/**
+ * Parse log bullets; legacy lines (no `fulcrum-log` comment) use `anchorMtime` and list order for sort keys.
+ */
+export function parseProjectLogLines(
+	lines: string[],
+	anchorMtime: number,
+): ProjectLogActivityEntry[] {
+	const len = lines.length;
+	const out: ProjectLogActivityEntry[] = [];
+	for (let i = 0; i < lines.length; i++) {
+		const core = parseProjectLogLineCore(lines[i]!);
+		if (!core) continue;
+		const sortMs =
+			core.sortMs != null
+				? core.sortMs
+				: anchorMtime - (len - 1 - i) * 1000;
+		out.push({
+			sortMs,
+			title: core.title,
+			stampLabel: core.stampLabel,
+			rawLine: core.rawLine,
+		});
+	}
+	return out;
+}

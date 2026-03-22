@@ -5,12 +5,20 @@
 	import {parseList} from "../fulcrum/settingsDefaults";
 	import type {AtomicNoteRow, ProjectRollup} from "../fulcrum/types";
 	import {
+		daysSinceCalendar,
 		daysUntilCalendar,
 		formatShortMonthDay,
 		formatTrackedMinutesShort,
 		urgencyColorForDays,
 	} from "../fulcrum/utils/dates";
-	import {preferLightForegroundOnSolidHex} from "../fulcrum/utils/projectVisual";
+	import {
+		buildActivityRowModels,
+		buildNextUpItems,
+		incompleteProjectTasks,
+	} from "../fulcrum/utils/projectActivity";
+	import {preferLightForegroundOnAccentCss} from "../fulcrum/utils/projectVisual";
+	import type {ProjectLogActivityEntry} from "../fulcrum/projectNote";
+	import ActivityRow from "./ActivityRow.svelte";
 	import TaskCard from "./TaskCard.svelte";
 
 	export let plugin: FulcrumHost;
@@ -37,27 +45,26 @@
 		}
 	}
 
-	let logLines: string[] = [];
+	let logEntries: ProjectLogActivityEntry[] = [];
 	let logDraft = "";
 	let logBusy = false;
 
-	async function loadLog(): Promise<void> {
-		logLines = await plugin.loadProjectLogPreview(projectPath);
+	async function loadLogActivity(): Promise<void> {
+		logEntries = await plugin.loadProjectLogActivity(projectPath);
 	}
 
 	$: {
 		void rev;
 		void projectPath;
-		void loadLog();
+		void loadLogActivity();
 	}
 
 	$: doneTask = new Set(parseList(plugin.settings.taskDoneStatuses));
 
-	$: daysLaunch = rollup
-		? daysUntilCalendar(rollup.pageMeta.launchDate)
+	$: daysSinceReview = rollup
+		? daysSinceCalendar(rollup.pageMeta.lastReviewed)
 		: null;
 	$: daysReview = rollup ? daysUntilCalendar(rollup.pageMeta.nextReview) : null;
-	$: colorLaunch = urgencyColorForDays(daysLaunch);
 	$: colorReview = urgencyColorForDays(daysReview);
 
 	function openPath(path: string): void {
@@ -67,18 +74,14 @@
 		}
 	}
 
-	function openNoteRow(n: AtomicNoteRow): void {
-		openPath(n.file.path);
-	}
-
-	function onNoteHover(ev: MouseEvent, n: AtomicNoteRow): void {
-		if (!hoverParentLeaf) return;
-		plugin.triggerFulcrumHoverLink(
-			ev,
-			hoverParentLeaf,
-			ev.currentTarget as HTMLElement,
-			n.file.path,
-		);
+	function noteChipsNext(n: AtomicNoteRow): string[] {
+		const c: string[] = ["#note"];
+		if (n.dateDisplay) c.push(n.dateDisplay);
+		if (n.noteType) c.push(n.noteType);
+		for (const t of n.tags) c.push(`#${t}`);
+		if (n.trackedMinutes > 0) c.push(formatTrackedMinutesShort(n.trackedMinutes));
+		if (n.priority) c.push(n.priority);
+		return c;
 	}
 
 	function jiraHref(raw: string | undefined): string | null {
@@ -94,7 +97,7 @@
 		try {
 			await plugin.appendProjectLogEntry(projectPath, logDraft);
 			logDraft = "";
-			await loadLog();
+			await loadLogActivity();
 		} finally {
 			logBusy = false;
 		}
@@ -105,11 +108,24 @@
 		logBusy = true;
 		try {
 			await plugin.markProjectReviewed(projectPath);
-			await loadLog();
+			await loadLogActivity();
 		} finally {
 			logBusy = false;
 		}
 	}
+
+	$: nextUpItems = rollup ? buildNextUpItems(rollup, doneTask, 8) : [];
+
+	$: openTasks = rollup ? incompleteProjectTasks(rollup.tasks, doneTask) : [];
+
+	$: activityRows = rollup
+		? buildActivityRowModels(rollup, logEntries, {
+				projectPath,
+				openPath,
+				openTask: (t) => plugin.openIndexedTask(t),
+				formatTracked: formatTrackedMinutesShort,
+			})
+		: [];
 
 	$: noteFolderHint =
 		plugin.settings.atomicNoteFolderPrefixes.trim().length === 0;
@@ -127,21 +143,36 @@
 	/** White/light text on banner (image, or solid color that reads as “dark” via WCAG luminance). */
 	$: bannerLightFg =
 		bannerMode === "image" ||
-		(bannerMode === "solid" &&
-			!!rollup &&
-			(!rollup.accentColorCss.startsWith("#") ||
-				preferLightForegroundOnSolidHex(rollup.accentColorCss)));
+		(bannerMode === "solid" && !!rollup && preferLightForegroundOnAccentCss(rollup.accentColorCss));
 
 	/** Text/icon color on solid buttons that use project color as background. */
 	$: ctaFgOnAccent = !rollup
 		? "var(--text-on-accent)"
-		: rollup.accentColorCss.startsWith("#")
-			? preferLightForegroundOnSolidHex(rollup.accentColorCss)
-				? "rgba(255, 255, 255, 0.97)"
-				: "rgba(24, 24, 28, 0.95)"
-			: "rgba(255, 255, 255, 0.97)";
+		: preferLightForegroundOnAccentCss(rollup.accentColorCss)
+			? "rgba(255, 255, 255, 0.97)"
+			: "rgba(24, 24, 28, 0.95)";
 
 	$: statusPillText = rollup ? rollup.project.status.toUpperCase() : "";
+
+	function statusPillKind(status: string): string {
+		const x = status.toLowerCase();
+		if (
+			x === "active" ||
+			x.includes("progress") ||
+			x.includes("ongoing")
+		) {
+			return "active";
+		}
+		if (x.includes("done") || x.includes("complete") || x.includes("closed")) {
+			return "done";
+		}
+		if (x.includes("block") || x.includes("hold") || x.includes("pause")) {
+			return "blocked";
+		}
+		return "neutral";
+	}
+
+	$: statusKind = rollup ? statusPillKind(rollup.project.status) : "neutral";
 
 	function stubNewNote(): void {
 		plugin.notifyNewNoteFromProject(projectPath);
@@ -174,6 +205,7 @@
 			{/if}
 			<div
 				class="fulcrum-project-banner__inner"
+				class:fulcrum-project-banner__inner--has-foot={Boolean(statusPillText || ticketUrl)}
 				class:fulcrum-project-banner__inner--on-dark={bannerLightFg}
 				class:fulcrum-project-banner__inner--on-light={!bannerLightFg}
 			>
@@ -182,19 +214,6 @@
 						<h1 class="fulcrum-project-banner__title">{rollup.project.name}</h1>
 						{#if rollup.pageMeta.description}
 							<p class="fulcrum-project-banner__desc">{rollup.pageMeta.description}</p>
-						{/if}
-						{#if rollup.pageMeta.launchDate}
-							<ul class="fulcrum-project-banner__dates">
-								<li>
-									<span class="fulcrum-project-banner__date-label">Launch</span>
-									{formatShortMonthDay(rollup.pageMeta.launchDate)}
-									{#if daysLaunch !== null}
-										<span class="fulcrum-project-banner__kpi" style="color: {colorLaunch};">
-											({daysLaunch}d)
-										</span>
-									{/if}
-								</li>
-							</ul>
 						{/if}
 					</div>
 					<div class="fulcrum-project-banner__right">
@@ -217,15 +236,21 @@
 							>
 								Mark reviewed
 							</button>
-							<button type="button" class="fulcrum-banner-btn" on:click={stubNewNote}>New note</button>
-							<button type="button" class="fulcrum-banner-btn" on:click={stubNewTask}>New task</button>
+							<button type="button" class="fulcrum-banner-btn" on:click={stubNewTask}>
+								New task
+							</button>
+							<button type="button" class="fulcrum-banner-btn" on:click={stubNewNote}>
+								New note
+							</button>
 						</div>
 					</div>
 				</div>
 				{#if statusPillText || ticketUrl}
 					<div class="fulcrum-project-banner__foot">
 						{#if statusPillText}
-							<span class="fulcrum-status-pill fulcrum-status-pill--banner">{statusPillText}</span>
+							<span
+								class="fulcrum-status-pill fulcrum-status-pill--banner fulcrum-status-pill--jira"
+								data-fulcrum-status={statusKind}>{statusPillText}</span>
 						{/if}
 						{#if ticketUrl}
 							<a
@@ -234,7 +259,7 @@
 								target="_blank"
 								rel="noopener noreferrer"
 							>
-								External Link
+								External link
 							</a>
 						{/if}
 					</div>
@@ -245,7 +270,14 @@
 		<div class="fulcrum-project-meta-strip">
 			<div class="fulcrum-project-meta-strip__row">
 				{#if rollup.pageMeta.lastReviewed}
-					<span>Last reviewed {formatShortMonthDay(rollup.pageMeta.lastReviewed)}</span>
+					<span>
+						Last reviewed {formatShortMonthDay(rollup.pageMeta.lastReviewed)}
+						{#if daysSinceReview !== null}
+							<span class="fulcrum-meta-days fulcrum-meta-days--since">
+								(+{daysSinceReview}d)
+							</span>
+						{/if}
+					</span>
 				{/if}
 				{#if rollup.pageMeta.lastReviewed && rollup.pageMeta.nextReview}
 					<span class="fulcrum-meta-sep">·</span>
@@ -254,7 +286,7 @@
 					<span>
 						Next review {formatShortMonthDay(rollup.pageMeta.nextReview)}
 						{#if daysReview !== null}
-							<span class="fulcrum-project-banner__kpi" style="color: {colorReview};">
+							<span class="fulcrum-meta-days" style="color: {colorReview};">
 								({daysReview}d)
 							</span>
 						{/if}
@@ -288,11 +320,48 @@
 
 		<section class="fulcrum-section">
 			<h2>Next up</h2>
-			{#if rollup.nextTasks.length === 0}
-				<p class="fulcrum-muted">No open tasks linked to this project.</p>
+			{#if nextUpItems.length === 0}
+				<p class="fulcrum-muted">Nothing with a date of today or later (tasks need due or scheduled; notes use their primary date).</p>
+			{:else}
+				<ul class="fulcrum-activity-list fulcrum-next-up-list">
+					{#each nextUpItems as item}
+						<li>
+							{#if item.kind === "task" && item.task}
+								<TaskCard
+									plugin={plugin}
+									task={item.task}
+									done={false}
+									showProjectLink={false}
+								/>
+							{:else if item.kind === "note" && item.note}
+								<ActivityRow
+									title={item.note.entryTitle}
+									chips={noteChipsNext(item.note)}
+									kind="note"
+									whenClick={() => item.note && openPath(item.note.file.path)}
+									{plugin}
+									hoverParentLeaf={hoverParentLeaf}
+									hoverPath={item.note.file.path}
+								/>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+
+		<section class="fulcrum-section">
+			<h2>Tasks</h2>
+			<p class="fulcrum-muted fulcrum-section__lede">
+				Task notes and checklist tasks linked to this project that are still open (status not done, no completion date). Finished items appear in Activity.
+			</p>
+			{#if rollup.tasks.length === 0}
+				<p class="fulcrum-muted">No tasks in your indexed sources link to this project.</p>
+			{:else if openTasks.length === 0}
+				<p class="fulcrum-muted">No incomplete tasks.</p>
 			{:else}
 				<ul class="fulcrum-task-list fulcrum-task-agenda-list">
-					{#each rollup.nextTasks.slice(0, 8) as t}
+					{#each openTasks as t}
 						<li>
 							<TaskCard plugin={plugin} task={t} done={false} showProjectLink={false} />
 						</li>
@@ -301,99 +370,32 @@
 			{/if}
 		</section>
 
-		<section class="fulcrum-section fulcrum-section--split">
-			<h2>Tasks and notes</h2>
-
-			<div class="fulcrum-block">
-				<h3 class="fulcrum-block__title">Tasks</h3>
-				{#if rollup.tasks.length === 0}
-					<p class="fulcrum-muted">No tasks in your indexed sources link to this project.</p>
-				{:else}
-					<h4 class="fulcrum-block__subtitle">Open</h4>
-					{#if rollup.tasks.filter((t) => !doneTask.has(t.status)).length === 0}
-						<p class="fulcrum-muted">No open tasks.</p>
-					{:else}
-						<ul class="fulcrum-task-list fulcrum-task-agenda-list">
-							{#each rollup.tasks.filter((t) => !doneTask.has(t.status)) as t}
-								<li>
-									<TaskCard plugin={plugin} task={t} done={false} showProjectLink={false} />
-								</li>
-							{/each}
-						</ul>
-					{/if}
-					<h4 class="fulcrum-block__subtitle">Completed</h4>
-					{#if rollup.tasks.filter((t) => doneTask.has(t.status)).length === 0}
-						<p class="fulcrum-muted">No completed tasks indexed.</p>
-					{:else}
-						<ul class="fulcrum-task-list fulcrum-task-agenda-list">
-							{#each rollup.tasks.filter((t) => doneTask.has(t.status)) as t}
-								<li>
-									<TaskCard plugin={plugin} task={t} done={true} showProjectLink={false} />
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				{/if}
-			</div>
-
-			<div class="fulcrum-block">
-				<h3 class="fulcrum-block__title">Notes</h3>
-				{#if noteFolderHint}
-					<p class="fulcrum-muted">Add atomic note folder prefixes in Fulcrum settings to list linked notes here.</p>
-				{:else if rollup.atomicNotes.length === 0}
-					<p class="fulcrum-muted">No linked notes under your configured folders for this year.</p>
-				{:else}
-					<ul class="fulcrum-task-list fulcrum-task-agenda-list fulcrum-note-agenda-list">
-						{#each rollup.atomicNotes as n}
-							<li>
-								<div
-									class="fulcrum-task-card fulcrum-note-row"
-									data-priority={n.priority === "high" ? "high" : n.priority === "low" ? "low" : ""}
-									role="group"
-									aria-label={n.entryTitle}
-									on:mouseenter={(ev) => onNoteHover(ev, n)}
-								>
-									<div class="fulcrum-task-card__main-row fulcrum-note-row__main">
-										<span class="fulcrum-note-row__spacer" aria-hidden="true" />
-										<div class="fulcrum-task-card__content fulcrum-note-row__content">
-											<button
-												type="button"
-												class="fulcrum-task-card__title"
-												on:click={() => openNoteRow(n)}
-											>
-												<span class="fulcrum-task-card__title-text">{n.entryTitle}</span>
-											</button>
-											{#if n.bodyPreview}
-												<p class="fulcrum-note-row__preview">{n.bodyPreview}</p>
-											{/if}
-											{#if n.dateDisplay || n.noteType || n.tags.length > 0 || n.trackedMinutes > 0}
-												<div class="fulcrum-task-card__metadata">
-													<div class="fulcrum-task-card__metadata-chips">
-														{#if n.dateDisplay}
-															<span class="fulcrum-task-card__note-date">{n.dateDisplay}</span>
-														{/if}
-														{#if n.noteType}
-															<span class="fulcrum-task-card__note-type">{n.noteType}</span>
-														{/if}
-														{#each n.tags as tag}
-															<span class="fulcrum-task-card__tag">#{tag}</span>
-														{/each}
-													</div>
-													{#if n.trackedMinutes > 0}
-														<span class="fulcrum-task-card__tracked"
-															>{formatTrackedMinutesShort(n.trackedMinutes)}</span
-														>
-													{/if}
-												</div>
-											{/if}
-										</div>
-									</div>
-								</div>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
+		<section class="fulcrum-section">
+			<h2>Activity</h2>
+			{#if noteFolderHint && rollup.atomicNotes.length === 0 && activityRows.length === 0}
+				<p class="fulcrum-muted">
+					Add atomic note folder prefixes in Fulcrum settings to include linked notes here.
+				</p>
+			{:else if activityRows.length === 0}
+				<p class="fulcrum-muted">No activity to show yet.</p>
+			{:else}
+				<ul class="fulcrum-activity-list fulcrum-activity-list--timeline">
+					{#each activityRows as row}
+						<li>
+							<ActivityRow
+								variant="timeline"
+								title={row.title}
+								chips={row.chips}
+								kind={row.kind}
+								whenClick={row.open}
+								{plugin}
+								hoverParentLeaf={hoverParentLeaf}
+								hoverPath={row.hoverPath}
+							/>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 		</section>
 
 		<section class="fulcrum-section fulcrum-section--log">
@@ -418,13 +420,6 @@
 					Append to project note
 				</button>
 			</div>
-			{#if logLines.length > 0}
-				<ul class="fulcrum-log-preview">
-					{#each logLines as line}
-						<li>{line}</li>
-					{/each}
-				</ul>
-			{/if}
 		</section>
 	</div>
 {/if}

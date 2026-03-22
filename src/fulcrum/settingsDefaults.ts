@@ -1,5 +1,7 @@
 export type TaskSourceMode = "taskNotes" | "obsidianTasks" | "both";
 export type ProjectStatusIndication = "frontmatter" | "subfolder";
+export type ProjectSidebarSortBy = "launch" | "nextReview" | "rank";
+export type ProjectSidebarSortDir = "asc" | "desc";
 
 export interface FulcrumSettings {
 	areasProjectsFolder: string;
@@ -52,12 +54,16 @@ export interface FulcrumSettings {
 	dateDisplayFormat: string;
 	completionThresholdPercent: number;
 	dashboardActiveProjectsGroupBy: "area" | "status";
+	projectSidebarSortBy: ProjectSidebarSortBy;
+	projectSidebarSortDir: ProjectSidebarSortDir;
 
 	projectStatusIndication: ProjectStatusIndication;
 	projectStatusField: string;
 
 	/** Frontmatter keys on the project note (review / launch). */
 	projectLaunchDateField: string;
+	/** Frontmatter key for numeric rank (higher = more important). */
+	projectRankField: string;
 	projectLastReviewedField: string;
 	projectReviewFrequencyField: string;
 	projectNextReviewField: string;
@@ -125,11 +131,14 @@ export const DEFAULT_SETTINGS: FulcrumSettings = {
 	dateDisplayFormat: "YYYY-MM-DD",
 	completionThresholdPercent: 100,
 	dashboardActiveProjectsGroupBy: "area",
+	projectSidebarSortBy: "launch",
+	projectSidebarSortDir: "asc",
 
 	projectStatusIndication: "frontmatter",
 	projectStatusField: "status",
 
 	projectLaunchDateField: "launchDate",
+	projectRankField: "rank",
 	projectLastReviewedField: "lastReviewed",
 	projectReviewFrequencyField: "reviewFrequency",
 	projectNextReviewField: "nextReview",

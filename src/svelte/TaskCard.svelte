@@ -53,9 +53,7 @@
 		plugin.openIndexedTask(task);
 	}
 
-	async function onToggleDot(ev: MouseEvent): Promise<void> {
-		ev.preventDefault();
-		ev.stopPropagation();
+	async function runToggle(): Promise<void> {
 		if (!canToggle || toggling) return;
 		toggling = true;
 		try {
@@ -63,6 +61,26 @@
 		} finally {
 			toggling = false;
 		}
+	}
+
+	async function onToggleDot(ev: MouseEvent): Promise<void> {
+		ev.preventDefault();
+		ev.stopPropagation();
+		await runToggle();
+	}
+
+	function onToggleKeydown(ev: KeyboardEvent): void {
+		if (!canToggle || toggling) return;
+		if (ev.key !== "Enter" && ev.key !== " ") return;
+		ev.preventDefault();
+		ev.stopPropagation();
+		void runToggle();
+	}
+
+	function onTitleKeydown(ev: KeyboardEvent): void {
+		if (ev.key !== "Enter" && ev.key !== " ") return;
+		ev.preventDefault();
+		openTask();
 	}
 
 	function projectLabel(t: IndexedTask): string {
@@ -73,26 +91,33 @@
 
 <div class={rowClass} data-priority={band || undefined}>
 	<div class="fulcrum-task-card__main-row">
-		<button
-			type="button"
+		<div
+			role="checkbox"
+			tabindex={canToggle ? 0 : -1}
+			aria-checked={done}
+			aria-disabled={!canToggle}
 			class="fulcrum-task-card__status-dot"
 			class:fulcrum-task-card__status-dot--done={done}
 			class:fulcrum-task-card__status-dot--readonly={!canToggle}
 			style={done ? undefined : `border-color: ${borderPri}`}
-			disabled={!canToggle}
-			aria-checked={done}
-			role="checkbox"
 			title={canToggle ? "Toggle done" : "Open the note to edit (mobile)"}
 			on:click={onToggleDot}
+			on:keydown={onToggleKeydown}
 		>
 			{#if done}
 				<span class="fulcrum-task-card__check-icon" aria-hidden="true">✓</span>
 			{/if}
-		</button>
+		</div>
 		<div class="fulcrum-task-card__content">
-			<button type="button" class="fulcrum-task-card__title" on:click={openTask}>
+			<div
+				role="button"
+				tabindex="0"
+				class="fulcrum-task-card__title"
+				on:click={openTask}
+				on:keydown={onTitleKeydown}
+			>
 				<span class="fulcrum-task-card__title-text">{task.title}</span>
-			</button>
+			</div>
 			{#if due.text || sched.text || (showProjectLink && task.projectFile) || task.tags.length > 0 || tracked}
 				<div class="fulcrum-task-card__metadata">
 					<div class="fulcrum-task-card__metadata-chips">

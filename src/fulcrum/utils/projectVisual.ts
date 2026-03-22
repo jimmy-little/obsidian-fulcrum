@@ -53,8 +53,21 @@ function stripEmbedBang(s: string): string {
 	return s.replace(/^\s*!\[\[/, "[[");
 }
 
+/** YAML may store `"[[x]]"` or `'path'`; strip one or more wrapping quote layers. */
+function stripBannerRawQuotes(s: string): string {
+	let t = s.trim();
+	while (
+		(t.startsWith('"') && t.endsWith('"')) ||
+		(t.startsWith("'") && t.endsWith("'"))
+	) {
+		t = t.slice(1, -1).trim();
+	}
+	return t;
+}
+
 /**
  * Observable URI for `<img src>`, or remote https URL, or null.
+ * Accepts vault paths, `[[wikilinks]]`, optional `![[embed]]`, optional YAML quotes.
  */
 export function resolveBannerImageSrc(
 	app: App,
@@ -62,11 +75,16 @@ export function resolveBannerImageSrc(
 	bannerRaw: string | undefined | null,
 ): string | null {
 	if (bannerRaw == null || !String(bannerRaw).trim()) return null;
-	let s = String(bannerRaw).trim();
+	let s = stripBannerRawQuotes(String(bannerRaw).trim());
 	if (/^https?:\/\//i.test(s)) return s;
 
 	s = stripEmbedBang(s);
-	const link = parseWikiLink(s) ?? (s.includes("[[") ? null : s);
+	s = stripBannerRawQuotes(s);
+
+	let link = parseWikiLink(s);
+	if (link == null && !s.includes("[[")) {
+		link = s.length ? s : null;
+	}
 	if (!link) return null;
 
 	const dest = app.metadataCache.getFirstLinkpathDest(link, sourceFile.path);
@@ -116,6 +134,37 @@ export function preferLightForegroundOnSolidHex(hex: string): boolean {
 	const L = relativeLuminanceHex(hex);
 	if (L == null) return true;
 	return L < 0.5;
+}
+
+function relativeLuminanceSrgb255(r: number, g: number, b: number): number {
+	const R = srgbChannelToLinear(r);
+	const G = srgbChannelToLinear(g);
+	const B = srgbChannelToLinear(b);
+	return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+}
+
+/**
+ * True if UI should use light (white) foreground on this accent/banner CSS color.
+ * Handles `#hex`, `rgb()`, `rgba()`. Unknown values default to light foreground (banner image-style).
+ */
+export function preferLightForegroundOnAccentCss(css: string): boolean {
+	const t = css.trim();
+	if (t.startsWith("#")) return preferLightForegroundOnSolidHex(t);
+	const rgbM = t.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+	if (rgbM) {
+		const r = Number(rgbM[1]);
+		const g = Number(rgbM[2]);
+		const b = Number(rgbM[3]);
+		if ([r, g, b].every((x) => Number.isFinite(x) && x >= 0 && x <= 255)) {
+			return relativeLuminanceSrgb255(r, g, b) < 0.5;
+		}
+	}
+	const hslM = t.match(/^hsla?\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/i);
+	if (hslM) {
+		const light = Number(hslM[3]);
+		if (Number.isFinite(light)) return light < 52;
+	}
+	return true;
 }
 
 /** Rough luminance (legacy); prefer {@link preferLightForegroundOnSolidHex} for banners. */

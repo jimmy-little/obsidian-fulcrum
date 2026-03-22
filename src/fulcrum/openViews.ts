@@ -1,6 +1,7 @@
 import type {App, WorkspaceLeaf} from "obsidian";
-import {VIEW_DASHBOARD, VIEW_PROJECT} from "./constants";
+import {VIEW_DASHBOARD, VIEW_PROJECT, VIEW_PROJECT_MANAGER} from "./constants";
 import type {FulcrumSettings} from "./settingsDefaults";
+import type {ProjectManagerViewState} from "../views/ProjectManagerView";
 
 function claimLeaf(app: App, settings: FulcrumSettings): WorkspaceLeaf {
 	if (settings.openViewsIn === "sidebar") {
@@ -10,18 +11,40 @@ function claimLeaf(app: App, settings: FulcrumSettings): WorkspaceLeaf {
 	return app.workspace.getLeaf("tab");
 }
 
-export async function revealOrCreateDashboard(
+/** Primary Fulcrum shell: sidebars + dashboard or project in the main pane. */
+export async function revealOrCreateProjectManager(
 	app: App,
 	settings: FulcrumSettings,
+	initial?: ProjectManagerViewState,
 ): Promise<void> {
-	const existing = app.workspace.getLeavesOfType(VIEW_DASHBOARD)[0];
+	const state: ProjectManagerViewState =
+		initial?.mode === "project" && initial.projectPath
+			? {mode: "project", projectPath: initial.projectPath}
+			: {mode: "dashboard"};
+	const existing = app.workspace.getLeavesOfType(VIEW_PROJECT_MANAGER)[0];
 	if (existing) {
+		await existing.setViewState({
+			type: VIEW_PROJECT_MANAGER,
+			active: true,
+			state,
+		});
 		await app.workspace.revealLeaf(existing);
 		return;
 	}
 	const leaf = claimLeaf(app, settings);
-	await leaf.setViewState({type: VIEW_DASHBOARD, active: true});
+	await leaf.setViewState({
+		type: VIEW_PROJECT_MANAGER,
+		active: true,
+		state,
+	});
 	await app.workspace.revealLeaf(leaf);
+}
+
+export async function revealOrCreateDashboard(
+	app: App,
+	settings: FulcrumSettings,
+): Promise<void> {
+	await revealOrCreateProjectManager(app, settings, {mode: "dashboard"});
 }
 
 export async function openProjectSummaryLeaf(
@@ -29,11 +52,8 @@ export async function openProjectSummaryLeaf(
 	settings: FulcrumSettings,
 	projectPath: string,
 ): Promise<void> {
-	const leaf = claimLeaf(app, settings);
-	await leaf.setViewState({
-		type: VIEW_PROJECT,
-		active: true,
-		state: {path: projectPath},
+	await revealOrCreateProjectManager(app, settings, {
+		mode: "project",
+		projectPath,
 	});
-	await app.workspace.revealLeaf(leaf);
 }

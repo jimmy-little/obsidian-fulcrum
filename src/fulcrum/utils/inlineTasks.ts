@@ -14,29 +14,54 @@ export function flipMarkdownCheckboxLine(line: string): string | null {
 	return `${m[1]}[${next}]${m[3]}`;
 }
 
-/** Obsidian Tasks-style emoji metadata: due / scheduled from line tail. */
+/**
+ * Due / scheduled on a checkbox line: Obsidian Tasks emojis, Dataview `[due::]` fields,
+ * and legacy ⏫ scheduled. Scheduled uses ⏳ (Tasks default) and ⏫.
+ */
 export function parseObsidianTasksEmojiDates(line: string): {
 	title: string;
 	dueDate?: string;
 	scheduledDate?: string;
 } {
-	let t = line;
 	const dues: string[] = [];
 	const sched: string[] = [];
-	const dueRe = /(?:📅|⏰|📆)\s*(\d{4}-\d{2}-\d{2})/g;
-	let m: RegExpExecArray | null;
-	while ((m = dueRe.exec(line)) !== null) {
-		if (m[1]) dues.push(m[1]);
+
+	function pushDue(iso: string): void {
+		if (/^\d{4}-\d{2}-\d{2}$/u.test(iso)) dues.push(iso);
 	}
-	const schedRe = /⏫\s*(\d{4}-\d{2}-\d{2})/g;
-	while ((m = schedRe.exec(line)) !== null) {
-		if (m[1]) sched.push(m[1]);
+	function pushSched(iso: string): void {
+		if (/^\d{4}-\d{2}-\d{2}$/u.test(iso)) sched.push(iso);
 	}
-	t = t
-		.replace(/(?:📅|⏰|📆)\s*\d{4}-\d{2}-\d{2}/g, " ")
-		.replace(/⏫\s*\d{4}-\d{2}-\d{2}/g, " ")
-		.replace(/\s+/g, " ")
+
+	for (const m of line.matchAll(/(?:📅|⏰|📆)\s*(\d{4}-\d{2}-\d{2})/gu)) {
+		if (m[1]) pushDue(m[1]);
+	}
+	for (const m of line.matchAll(/(?:⏳|⏫)\s*(\d{4}-\d{2}-\d{2})/gu)) {
+		if (m[1]) pushSched(m[1]);
+	}
+	for (const m of line.matchAll(/\[due::\s*(\d{4}-\d{2}-\d{2})\s*\]/giu)) {
+		if (m[1]) pushDue(m[1]);
+	}
+	for (const m of line.matchAll(/\[scheduled::\s*(\d{4}-\d{2}-\d{2})\s*\]/giu)) {
+		if (m[1]) pushSched(m[1]);
+	}
+	for (const m of line.matchAll(/(?:^|[\s,])due::\s*(\d{4}-\d{2}-\d{2})/giu)) {
+		if (m[1]) pushDue(m[1]);
+	}
+	for (const m of line.matchAll(/(?:^|[\s,])scheduled::\s*(\d{4}-\d{2}-\d{2})/giu)) {
+		if (m[1]) pushSched(m[1]);
+	}
+
+	let t = line
+		.replace(/(?:📅|⏰|📆)\s*\d{4}-\d{2}-\d{2}/gu, " ")
+		.replace(/(?:⏳|⏫)\s*\d{4}-\d{2}-\d{2}/gu, " ")
+		.replace(/\[due::\s*\d{4}-\d{2}-\d{2}\s*\]/giu, " ")
+		.replace(/\[scheduled::\s*\d{4}-\d{2}-\d{2}\s*\]/giu, " ")
+		.replace(/(?:^|[\s,])due::\s*\d{4}-\d{2}-\d{2}/giu, " ")
+		.replace(/(?:^|[\s,])scheduled::\s*\d{4}-\d{2}-\d{2}/giu, " ")
+		.replace(/\s+/gu, " ")
 		.trim();
+
 	return {
 		title: t,
 		dueDate: dues[0],

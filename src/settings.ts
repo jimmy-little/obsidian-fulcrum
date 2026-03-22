@@ -194,6 +194,7 @@ export class FulcrumSettingTab extends PluginSettingTab {
 		this.textSetting("projectJiraField", "External link field (e.g. Jira)");
 		this.textSetting("projectBannerField", "Banner image field");
 		this.textSetting("projectColorField", "Project color field");
+		this.textSetting("projectRankField", "Project rank field (number; higher = more important)");
 		new Setting(containerEl)
 			.setName("Default review frequency (days)")
 			.setDesc("Used when the project note has no frequency in frontmatter.")
@@ -225,6 +226,9 @@ export class FulcrumSettingTab extends PluginSettingTab {
 		this.textSetting("projectLogSectionHeading", "Project log section heading");
 		new Setting(containerEl)
 			.setName("Project log preview lines")
+			.setDesc(
+				"How many recent log bullets to read from the project note (tail of the log section). Feeds the Activity view and refresh after append.",
+			)
 			.addSlider((sl) =>
 				sl
 					.setLimits(3, 30, 1)
@@ -238,14 +242,42 @@ export class FulcrumSettingTab extends PluginSettingTab {
 
 		heading(containerEl, "Display");
 		new Setting(containerEl)
-			.setName("Dashboard active projects group by")
-			.setDesc("Default grouping on the Fulcrum dashboard (you can also change it from the dashboard).")
+			.setName("Project list: group by")
+			.setDesc("Dashboard and Project Manager sidebar. You can also change grouping from the list header.")
 			.addDropdown((d) =>
 				d
-					.addOptions({area: "Group by area", status: "Group by status"})
+					.addOptions({area: "Area", status: "Status"})
 					.setValue(this.plugin.settings.dashboardActiveProjectsGroupBy)
 					.onChange(async (v) => {
 						this.plugin.settings.dashboardActiveProjectsGroupBy = v as FulcrumSettings["dashboardActiveProjectsGroupBy"];
+						await this.plugin.saveSettings();
+					}),
+			);
+		new Setting(containerEl)
+			.setName("Project list: sort by")
+			.setDesc("Order within each group (launch and next review use your project page date fields).")
+			.addDropdown((d) =>
+				d
+					.addOptions({
+						launch: "Launch date",
+						nextReview: "Next review",
+						rank: "Rank",
+					})
+					.setValue(this.plugin.settings.projectSidebarSortBy)
+					.onChange(async (v) => {
+						this.plugin.settings.projectSidebarSortBy = v as FulcrumSettings["projectSidebarSortBy"];
+						await this.plugin.saveSettings();
+					}),
+			);
+		new Setting(containerEl)
+			.setName("Project list: sort direction")
+			.setDesc("Ascending vs descending for the sort above. For rank, descending lists highest (most important) first.")
+			.addDropdown((d) =>
+				d
+					.addOptions({asc: "Ascending", desc: "Descending"})
+					.setValue(this.plugin.settings.projectSidebarSortDir)
+					.onChange(async (v) => {
+						this.plugin.settings.projectSidebarSortDir = v as FulcrumSettings["projectSidebarSortDir"];
 						await this.plugin.saveSettings();
 					}),
 			);

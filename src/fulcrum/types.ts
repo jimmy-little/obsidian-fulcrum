@@ -23,6 +23,14 @@ export interface IndexedProject {
 	banner?: string;
 	/** Raw frontmatter color token or CSS color. */
 	color?: string;
+	/** From project note frontmatter `description`. */
+	description?: string;
+	/** Next review date (ISO), from configured frontmatter field. */
+	nextReview?: string;
+	/** YYYY-MM-DD (or raw prefix) from launch / target date field; sidebar sort. */
+	launchDate?: string;
+	/** From configurable frontmatter key; higher = more important. */
+	rank?: number;
 }
 
 export interface IndexedTask {
@@ -64,6 +72,8 @@ export interface AtomicNoteRow {
 	bodyPreview?: string;
 	tags: string[];
 	priority?: string;
+	/** Vault file mtime for activity ordering (newest-first feeds). */
+	modifiedMs: number;
 }
 
 export interface ProjectPageMeta {

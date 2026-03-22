@@ -1,10 +1,13 @@
 import {Notice, Platform, Plugin, TFile, type WorkspaceLeaf} from "obsidian";
 import {
 	appendFulcrumProjectLog,
+	formatFulcrumProjectLogLine,
 	markProjectReviewDates,
+	parseProjectLogLines,
 	readFulcrumLogTail,
+	type ProjectLogActivityEntry,
 } from "./fulcrum/projectNote";
-import {FULCRUM_HOVER_SOURCE, VIEW_DASHBOARD, VIEW_PROJECT} from "./fulcrum/constants";
+import {FULCRUM_HOVER_SOURCE, VIEW_DASHBOARD, VIEW_PROJECT, VIEW_PROJECT_MANAGER} from "./fulcrum/constants";
 import {LinkMeetingModal, NewProjectModal, ProjectPickerModal} from "./fulcrum/modals";
 import type {FulcrumHost} from "./fulcrum/pluginBridge";
 import {openProjectSummaryLeaf, revealOrCreateDashboard} from "./fulcrum/openViews";
@@ -15,6 +18,7 @@ import type {IndexedTask} from "./fulcrum/types";
 import {VaultIndex} from "./fulcrum/VaultIndex";
 import {FulcrumSettingTab} from "./settings";
 import {DashboardView} from "./views/DashboardView";
+import {ProjectManagerView} from "./views/ProjectManagerView";
 import {ProjectView} from "./views/ProjectView";
 
 export default class FulcrumPlugin extends Plugin implements FulcrumHost {
@@ -25,6 +29,7 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 		await this.loadSettings();
 		this.vaultIndex = new VaultIndex(this.app, () => this.settings);
 
+		this.registerView(VIEW_PROJECT_MANAGER, (leaf) => new ProjectManagerView(leaf, this));
 		this.registerView(VIEW_DASHBOARD, (leaf) => new DashboardView(leaf, this));
 		this.registerView(VIEW_PROJECT, (leaf) => new ProjectView(leaf, this));
 
@@ -84,14 +89,14 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 		this.addSettingTab(new FulcrumSettingTab(this.app, this));
 
 		if (this.settings.showRibbonIcon) {
-			this.addRibbonIcon("layout-dashboard", "Fulcrum dashboard", () => {
+			this.addRibbonIcon("layout-dashboard", "Fulcrum Project Manager", () => {
 				void this.openDashboard();
 			});
 		}
 
 		this.addCommand({
 			id: "open-dashboard",
-			name: "Open dashboard",
+			name: "Open Project Manager",
 			callback: () => {
 				void this.openDashboard();
 			},
@@ -183,6 +188,19 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 			merged.dashboardActiveProjectsGroupBy !== "status"
 		) {
 			merged.dashboardActiveProjectsGroupBy = DEFAULT_SETTINGS.dashboardActiveProjectsGroupBy;
+		}
+		if (
+			merged.projectSidebarSortBy !== "launch" &&
+			merged.projectSidebarSortBy !== "nextReview" &&
+			merged.projectSidebarSortBy !== "rank"
+		) {
+			merged.projectSidebarSortBy = DEFAULT_SETTINGS.projectSidebarSortBy;
+		}
+		if (merged.projectSidebarSortDir !== "asc" && merged.projectSidebarSortDir !== "desc") {
+			merged.projectSidebarSortDir = DEFAULT_SETTINGS.projectSidebarSortDir;
+		}
+		if (typeof merged.projectRankField !== "string") {
+			merged.projectRankField = DEFAULT_SETTINGS.projectRankField;
 		}
 
 		this.settings = merged as FulcrumSettings;
@@ -331,6 +349,18 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 			this.settings.projectLogSectionHeading,
 			this.settings.projectLogPreviewMaxLines,
 		);
+	}
+
+	async loadProjectLogActivity(projectPath: string): Promise<ProjectLogActivityEntry[]> {
+		const f = this.app.vault.getAbstractFileByPath(projectPath);
+		if (!(f instanceof TFile)) return [];
+		const raw = await readFulcrumLogTail(
+			this.app,
+			f,
+			this.settings.projectLogSectionHeading,
+			this.settings.projectLogPreviewMaxLines,
+		);
+		return parseProjectLogLines(raw, f.stat.mtime);
 	}
 
 	notifyNewNoteFromProject(_projectPath: string): void {

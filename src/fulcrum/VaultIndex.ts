@@ -39,6 +39,19 @@ function fmString(fm: Record<string, unknown> | undefined, key: string): string 
 	return undefined;
 }
 
+function fmNumber(fm: Record<string, unknown> | undefined, key: string): number | undefined {
+	if (!fm || !key) return undefined;
+	const v = fm[key];
+	if (typeof v === "number" && Number.isFinite(v)) return v;
+	if (typeof v === "string") {
+		const t = v.trim();
+		if (!t) return undefined;
+		const n = Number.parseFloat(t);
+		return Number.isFinite(n) ? n : undefined;
+	}
+	return undefined;
+}
+
 function tagsIncludeTask(fm: Record<string, unknown>, tag: string): boolean {
 	const t = fm.tags;
 	const want = tag.toLowerCase();
@@ -180,6 +193,10 @@ export class VaultIndex {
 					s.projectStatusIndication === "subfolder"
 						? projectStatusFromSubfolderLayout(path, apRoot)
 						: (fmString(fm, statusKey) ?? "active").toLowerCase();
+				const launchRaw = fmString(fm, s.projectLaunchDateField)?.trim();
+				const launchDate =
+					launchRaw && launchRaw.length >= 10 ? launchRaw.slice(0, 10) : launchRaw || undefined;
+				const rankKey = s.projectRankField.trim() || "rank";
 				projects.push({
 					file,
 					name: fmString(fm, "name") ?? file.basename,
@@ -192,6 +209,10 @@ export class VaultIndex {
 					areaName: areaFile?.basename.replace(/\.md$/i, ""),
 					banner: fmString(fm, s.projectBannerField),
 					color: fmString(fm, s.projectColorField),
+					description: fmString(fm, "description"),
+					nextReview: fmString(fm, s.projectNextReviewField),
+					launchDate,
+					rank: fmNumber(fm, rankKey),
 				});
 				continue;
 			}
@@ -263,7 +284,8 @@ export class VaultIndex {
 					? this.app.metadataCache.getFirstLinkpathDest(al, file.path)
 					: null;
 				const status = (fmString(fm, s.taskStatusField) ?? openStatus).toLowerCase();
-				const due = fmString(fm, s.taskDueDateField);
+				const due =
+					fmString(fm, s.taskDueDateField) || fmString(fm, "due");
 				const sched =
 					fmString(fm, s.taskScheduledDateField) ?? fmString(fm, "scheduled");
 				tasks.push({
@@ -310,12 +332,15 @@ export class VaultIndex {
 					const {title: titleEmoji, dueDate: dueEm, scheduledDate: schedEm} =
 						parseObsidianTasksEmojiDates(titleBare);
 					if (inlineRegex && !inlineRegex.test(titleEmoji)) continue;
-					const proj = firstLinkedProjectFileInLine(
+					let proj = firstLinkedProjectFileInLine(
 						this.app,
 						rawLine,
 						file.path,
 						projectPaths,
 					);
+					if (!proj && projectPaths.has(file.path)) {
+						proj = file;
+					}
 					if (!proj) continue;
 					const isChecked = item.task === "x" || item.task === "X";
 					tasks.push({
@@ -420,6 +445,7 @@ export class VaultIndex {
 				bodyPreview,
 				tags: parseTagsFromFm(fm),
 				priority: fmString(fm, s.taskPriorityField)?.toLowerCase(),
+				modifiedMs: f.stat.mtime,
 			});
 		}
 
