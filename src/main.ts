@@ -1,14 +1,17 @@
-import {Notice, Plugin, TFile} from "obsidian";
+import {Notice, Platform, Plugin, TFile, type WorkspaceLeaf} from "obsidian";
 import {
 	appendFulcrumProjectLog,
 	markProjectReviewDates,
 	readFulcrumLogTail,
 } from "./fulcrum/projectNote";
-import {VIEW_DASHBOARD, VIEW_PROJECT} from "./fulcrum/constants";
+import {FULCRUM_HOVER_SOURCE, VIEW_DASHBOARD, VIEW_PROJECT} from "./fulcrum/constants";
 import {LinkMeetingModal, NewProjectModal, ProjectPickerModal} from "./fulcrum/modals";
 import type {FulcrumHost} from "./fulcrum/pluginBridge";
 import {openProjectSummaryLeaf, revealOrCreateDashboard} from "./fulcrum/openViews";
 import {DEFAULT_SETTINGS, type FulcrumSettings} from "./fulcrum/settingsDefaults";
+import {postTaskNotesToggleStatus} from "./fulcrum/taskNotesApi";
+import {toggleInlineTaskLine, toggleTaskNoteFrontmatter} from "./fulcrum/taskVaultToggle";
+import type {IndexedTask} from "./fulcrum/types";
 import {VaultIndex} from "./fulcrum/VaultIndex";
 import {FulcrumSettingTab} from "./settings";
 import {DashboardView} from "./views/DashboardView";
@@ -24,6 +27,11 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 
 		this.registerView(VIEW_DASHBOARD, (leaf) => new DashboardView(leaf, this));
 		this.registerView(VIEW_PROJECT, (leaf) => new ProjectView(leaf, this));
+
+		this.registerHoverLinkSource(FULCRUM_HOVER_SOURCE, {
+			display: this.manifest.name,
+			defaultMod: false,
+		});
 
 		this.registerEvent(
 			this.app.metadataCache.on("resolve", () => {
@@ -53,6 +61,13 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 		this.registerEvent(
 			this.app.vault.on("rename", () => {
 				this.vaultIndex.scheduleRebuild();
+			}),
+		);
+		this.registerEvent(
+			this.app.vault.on("modify", (f) => {
+				if (f instanceof TFile && f.extension === "md") {
+					this.vaultIndex.scheduleRebuild();
+				}
 			}),
 		);
 
@@ -129,12 +144,122 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 
 	}
 
+	onunload(): void {
+		this.vaultIndex.cancelScheduledRebuild();
+	}
+
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()) as FulcrumSettings;
+		const raw = (await this.loadData()) as Record<string, unknown> | null;
+		const loaded = raw ?? {};
+		const merged = {...DEFAULT_SETTINGS, ...loaded} as FulcrumSettings & Record<string, unknown>;
+
+		const pathsRaw =
+			typeof merged.taskNotesFolderPaths === "string" ? merged.taskNotesFolderPaths.trim() : "";
+		const legacyFolder =
+			typeof loaded.taskNotesFolder === "string" ? loaded.taskNotesFolder.trim() : "";
+		if (!pathsRaw && legacyFolder) {
+			merged.taskNotesFolderPaths = legacyFolder;
+		}
+
+		const mode = merged.taskSourceMode;
+		if (mode !== "taskNotes" && mode !== "obsidianTasks" && mode !== "both") {
+			const l = loaded.taskNotesEnabled !== false;
+			const a = loaded.inlineTasksEnabled !== false;
+			merged.taskSourceMode = l && a ? "both" : l ? "taskNotes" : a ? "obsidianTasks" : "both";
+		}
+
+		delete (merged as Record<string, unknown>).taskNotesFolder;
+		delete (merged as Record<string, unknown>).taskNotesEnabled;
+		delete (merged as Record<string, unknown>).inlineTasksEnabled;
+
+		if (
+			merged.projectStatusIndication !== "subfolder" &&
+			merged.projectStatusIndication !== "frontmatter"
+		) {
+			merged.projectStatusIndication = DEFAULT_SETTINGS.projectStatusIndication;
+		}
+		if (
+			merged.dashboardActiveProjectsGroupBy !== "area" &&
+			merged.dashboardActiveProjectsGroupBy !== "status"
+		) {
+			merged.dashboardActiveProjectsGroupBy = DEFAULT_SETTINGS.dashboardActiveProjectsGroupBy;
+		}
+
+		this.settings = merged as FulcrumSettings;
 	}
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+	}
+
+	async patchSettings(partial: Partial<FulcrumSettings>): Promise<void> {
+		Object.assign(this.settings, partial);
+		await this.saveData(this.settings);
+	}
+
+	openIndexedTask(task: IndexedTask): void {
+		const f = this.app.vault.getAbstractFileByPath(task.file.path);
+		if (!(f instanceof TFile)) return;
+		const leaf = this.app.workspace.getLeaf("tab");
+		if (task.source === "inline" && task.line != null) {
+			void leaf.openFile(f, {
+				active: true,
+				state: {line: task.line},
+				eState: {line: task.line},
+			});
+		} else {
+			void leaf.openFile(f);
+		}
+	}
+
+	async toggleIndexedTask(task: IndexedTask): Promise<void> {
+		if (!Platform.isDesktop) return;
+		try {
+			let apiOk = false;
+			if (task.source === "taskNote" && this.settings.taskNotesHttpApiEnabled) {
+				const ac = new AbortController();
+				const to = window.setTimeout(() => ac.abort(), 12_000);
+				try {
+					const r = await postTaskNotesToggleStatus(
+						this.settings.taskNotesHttpApiBaseUrl,
+						this.settings.taskNotesHttpApiToken || undefined,
+						task.file.path,
+						ac.signal,
+					);
+					apiOk = r.ok;
+					if (!apiOk) console.warn("Fulcrum TaskNotes API:", r.error);
+				} finally {
+					window.clearTimeout(to);
+				}
+			}
+			if (!apiOk) {
+				if (task.source === "taskNote") {
+					await toggleTaskNoteFrontmatter(this.app, task, this.settings);
+				} else {
+					await toggleInlineTaskLine(this.app, task);
+				}
+			}
+			await this.vaultIndex.rebuild();
+		} catch (e) {
+			console.error(e);
+			new Notice("Could not update task.");
+		}
+	}
+
+	triggerFulcrumHoverLink(
+		event: MouseEvent,
+		hoverParent: WorkspaceLeaf,
+		targetEl: HTMLElement,
+		path: string,
+	): void {
+		this.app.workspace.trigger("hover-link", {
+			event,
+			source: FULCRUM_HOVER_SOURCE,
+			hoverParent,
+			targetEl,
+			linktext: path,
+			sourcePath: path,
+		});
 	}
 
 	async openDashboard(): Promise<void> {

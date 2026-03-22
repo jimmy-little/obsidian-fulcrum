@@ -31,9 +31,16 @@ export interface IndexedTask {
 	status: string;
 	priority?: string;
 	dueDate?: string;
+	scheduledDate?: string;
 	completedDate?: string;
 	projectFile: TFile | null;
 	areaFile: TFile | null;
+	tags: string[];
+	createdAtMs: number;
+	source: "taskNote" | "inline";
+	/** 0-based line for inline checkbox tasks. */
+	line?: number;
+	trackedMinutes: number;
 }
 
 export interface IndexedMeeting {
@@ -51,6 +58,12 @@ export interface AtomicNoteRow {
 	dateSort: string;
 	dateDisplay: string;
 	trackedMinutes: number;
+	/** Primary label for the row (entry / heading / basename). */
+	entryTitle: string;
+	noteType?: string;
+	bodyPreview?: string;
+	tags: string[];
+	priority?: string;
 }
 
 export interface ProjectPageMeta {

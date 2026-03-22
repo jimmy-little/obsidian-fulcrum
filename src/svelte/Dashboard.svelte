@@ -2,7 +2,7 @@
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import {indexRevision} from "../fulcrum/stores";
 	import {parseList} from "../fulcrum/settingsDefaults";
-	import type {IndexedProject, IndexedTask} from "../fulcrum/types";
+	import type {IndexedArea, IndexedProject} from "../fulcrum/types";
 	import {
 		todayLocalISODate,
 		isDueToday,
@@ -11,6 +11,7 @@
 		dayStartMs,
 	} from "../fulcrum/utils/dates";
 	import {resolveProjectAccentCss} from "../fulcrum/utils/projectVisual";
+	import TaskCard from "./TaskCard.svelte";
 
 	export let plugin: FulcrumHost;
 
@@ -24,6 +25,8 @@
 	$: doneTask = new Set(parseList(plugin.settings.taskDoneStatuses));
 	$: doneProject = new Set(parseList(plugin.settings.projectDoneStatuses));
 	$: activeProject = snapshot.projects.filter((p) => !doneProject.has(p.status));
+	$: groupBy = plugin.settings.dashboardActiveProjectsGroupBy;
+	$: statusOrder = parseList(plugin.settings.projectStatuses);
 
 	$: tasksDueToday = snapshot.tasks.filter(
 		(t) => !doneTask.has(t.status) && isDueToday(t.dueDate, false),
@@ -58,6 +61,79 @@
 		.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""))
 		.slice(0, 15);
 
+	type AreaGroup = {
+		kind: "area" | "unassigned" | "orphan";
+		label: string;
+		area?: IndexedArea;
+		projects: IndexedProject[];
+	};
+
+	function sortProjectsByName(ps: IndexedProject[]): IndexedProject[] {
+		return [...ps].sort((a, b) =>
+			a.name.localeCompare(b.name, undefined, {sensitivity: "base"}),
+		);
+	}
+
+	$: areaGroups = ((): AreaGroup[] => {
+		const list = activeProject;
+		const byAreaPath = new Map<string, IndexedProject[]>();
+		for (const p of list) {
+			const key = p.areaFile?.path ?? "__none__";
+			const cur = byAreaPath.get(key) ?? [];
+			cur.push(p);
+			byAreaPath.set(key, cur);
+		}
+		const out: AreaGroup[] = [];
+		for (const a of snapshot.areas) {
+			const ps = byAreaPath.get(a.file.path);
+			if (ps?.length) {
+				out.push({kind: "area", label: a.name, area: a, projects: sortProjectsByName(ps)});
+				byAreaPath.delete(a.file.path);
+			}
+		}
+		const un = byAreaPath.get("__none__");
+		if (un?.length) {
+			out.push({kind: "unassigned", label: "Unassigned", projects: sortProjectsByName(un)});
+			byAreaPath.delete("__none__");
+		}
+		for (const [, ps] of byAreaPath) {
+			if (!ps.length) continue;
+			const sample = ps[0];
+			const label =
+				sample?.areaName?.trim() ||
+				sample?.areaFile?.path.split("/").pop()?.replace(/\.md$/i, "") ||
+				"Other";
+			out.push({kind: "orphan", label, projects: sortProjectsByName(ps)});
+		}
+		return out;
+	})();
+
+	$: statusGroups = (() => {
+		const map = new Map<string, IndexedProject[]>();
+		for (const p of activeProject) {
+			const k = p.status || "";
+			const cur = map.get(k) ?? [];
+			cur.push(p);
+			map.set(k, cur);
+		}
+		const keys = [...map.keys()];
+		keys.sort((a, b) => {
+			const ia = statusOrder.indexOf(a.toLowerCase());
+			const ib = statusOrder.indexOf(b.toLowerCase());
+			const ua = ia === -1;
+			const ub = ib === -1;
+			if (ua && ub) return a.localeCompare(b);
+			if (ua) return 1;
+			if (ub) return -1;
+			return ia - ib;
+		});
+		return keys.map((k) => ({
+			statusKey: k,
+			label: k ? k.replace(/\b\w/g, (c) => c.toUpperCase()) : "Folder root",
+			projects: sortProjectsByName(map.get(k) ?? []),
+		}));
+	})();
+
 	function openFile(path: string): void {
 		const f = plugin.app.vault.getAbstractFileByPath(path);
 		if (f && "extension" in f) {
@@ -69,10 +145,9 @@
 		void plugin.openProjectSummary(p.file.path);
 	}
 
-	function labelForTask(t: IndexedTask): string {
-		if (t.projectFile) return t.projectFile.basename.replace(/\.md$/i, "");
-		if (t.areaFile) return t.areaFile.basename.replace(/\.md$/i, "");
-		return "—";
+	async function onGroupByChange(ev: Event): Promise<void> {
+		const v = (ev.currentTarget as HTMLSelectElement).value as "area" | "status";
+		await plugin.patchSettings({dashboardActiveProjectsGroupBy: v});
 	}
 </script>
 
@@ -87,19 +162,19 @@
 	<section class="fulcrum-section">
 		<h2>Today</h2>
 		<div class="fulcrum-stat-grid">
-			<button type="button" class="fulcrum-stat-card" on:click={() => {}}>
+			<button type="button" class="fulcrum-stat-card">
 				<span class="fulcrum-stat-card__label">Tasks due</span>
 				<span class="fulcrum-stat-card__value">{tasksDueToday.length}</span>
 			</button>
-			<button type="button" class="fulcrum-stat-card" on:click={() => {}}>
+			<button type="button" class="fulcrum-stat-card">
 				<span class="fulcrum-stat-card__label">Overdue</span>
 				<span class="fulcrum-stat-card__value">{overdueTasks.length}</span>
 			</button>
-			<button type="button" class="fulcrum-stat-card" on:click={() => {}}>
+			<button type="button" class="fulcrum-stat-card">
 				<span class="fulcrum-stat-card__label">Meetings today</span>
 				<span class="fulcrum-stat-card__value">{meetingsToday.length}</span>
 			</button>
-			<button type="button" class="fulcrum-stat-card" on:click={() => {}}>
+			<button type="button" class="fulcrum-stat-card">
 				<span class="fulcrum-stat-card__label">Completed (7d)</span>
 				<span class="fulcrum-stat-card__value">{completedThisWeek.length}</span>
 			</button>
@@ -126,27 +201,14 @@
 	</section>
 
 	<section class="fulcrum-section">
-		<h2>Active projects</h2>
-		{#if activeProject.length === 0}
-			<p class="fulcrum-muted">No active projects. Use “Fulcrum: New project” or add <code>type: project</code> frontmatter.</p>
+		<h2>Today’s tasks</h2>
+		{#if todayTasks.length === 0}
+			<p class="fulcrum-muted">Nothing due today in indexed tasks.</p>
 		{:else}
-			<ul class="fulcrum-list">
-				{#each activeProject as p}
+			<ul class="fulcrum-task-list fulcrum-task-agenda-list">
+				{#each todayTasks as t}
 					<li>
-						<button
-							type="button"
-							class="fulcrum-linklike fulcrum-project-row"
-							style={`border-left: 3px solid ${resolveProjectAccentCss(p.color)}; padding-left: 0.45rem;`}
-							on:click={() => openProject(p)}
-						>
-							<span>{p.name}</span>
-							{#if p.priority}
-								<span class="fulcrum-tag">{p.priority}</span>
-							{/if}
-							{#if p.dueDate}
-								<span class="fulcrum-muted">due {p.dueDate.slice(0, 10)}</span>
-							{/if}
-						</button>
+						<TaskCard plugin={plugin} task={t} done={doneTask.has(t.status)} showProjectLink={true} />
 					</li>
 				{/each}
 			</ul>
@@ -154,21 +216,80 @@
 	</section>
 
 	<section class="fulcrum-section">
-		<h2>Today’s tasks</h2>
-		{#if todayTasks.length === 0}
-			<p class="fulcrum-muted">Nothing due today in TaskNotes.</p>
+		<div class="fulcrum-dashboard__section-head">
+			<h2>Active projects</h2>
+			<select class="dropdown" value={groupBy} on:change={(e) => void onGroupByChange(e)}>
+				<option value="area">Group by area</option>
+				<option value="status">Group by status</option>
+			</select>
+		</div>
+		{#if activeProject.length === 0}
+			<p class="fulcrum-muted">No active projects. Use “Fulcrum: New project” or add <code>type: project</code> frontmatter.</p>
+		{:else if groupBy === "area"}
+			{#each areaGroups as g}
+				<div class="fulcrum-dashboard__area-group">
+					{#if g.kind === "area" && g.area}
+						<h3 class="fulcrum-dashboard__area-group-title">
+							<button
+								type="button"
+								class="fulcrum-linklike"
+								on:click={() => openFile(g.area?.file.path ?? "")}
+							>
+								<span class="fulcrum-area-icon">{g.area?.icon ?? "▸"}</span>
+								<span>{g.label}</span>
+							</button>
+						</h3>
+					{:else}
+						<h3 class="fulcrum-dashboard__area-group-title">{g.label}</h3>
+					{/if}
+					<ul class="fulcrum-list">
+						{#each g.projects as p}
+							<li>
+								<button
+									type="button"
+									class="fulcrum-linklike fulcrum-project-row"
+									style={`border-left: 3px solid ${resolveProjectAccentCss(p.color)}; padding-left: 0.45rem;`}
+									on:click={() => openProject(p)}
+								>
+									<span>{p.name}</span>
+									{#if p.priority}
+										<span class="fulcrum-tag">{p.priority}</span>
+									{/if}
+									{#if p.dueDate}
+										<span class="fulcrum-muted">due {p.dueDate.slice(0, 10)}</span>
+									{/if}
+								</button>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/each}
 		{:else}
-			<ul class="fulcrum-task-list">
-				{#each todayTasks as t}
-					<li>
-						<button type="button" class="fulcrum-linklike" on:click={() => openFile(t.file.path)}>
-							<span class="fulcrum-task-check">☐</span>
-							<span>{t.title}</span>
-							<span class="fulcrum-muted">[{labelForTask(t)}]</span>
-						</button>
-					</li>
-				{/each}
-			</ul>
+			{#each statusGroups as sg}
+				<div class="fulcrum-dashboard__area-group">
+					<h3 class="fulcrum-dashboard__area-group-title">{sg.label}</h3>
+					<ul class="fulcrum-list">
+						{#each sg.projects as p}
+							<li>
+								<button
+									type="button"
+									class="fulcrum-linklike fulcrum-project-row"
+									style={`border-left: 3px solid ${resolveProjectAccentCss(p.color)}; padding-left: 0.45rem;`}
+									on:click={() => openProject(p)}
+								>
+									<span>{p.name}</span>
+									{#if p.priority}
+										<span class="fulcrum-tag">{p.priority}</span>
+									{/if}
+									{#if p.dueDate}
+										<span class="fulcrum-muted">due {p.dueDate.slice(0, 10)}</span>
+									{/if}
+								</button>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/each}
 		{/if}
 	</section>
 

@@ -60,7 +60,11 @@ export class ProjectView extends ItemView {
 
 		this.component = new ProjectSummary({
 			target: this.contentEl,
-			props: {plugin: this.host, projectPath: this.projectPath},
+			props: {
+				plugin: this.host,
+				projectPath: this.projectPath,
+				hoverParentLeaf: this.leaf,
+			},
 		});
 	}
 }

@@ -1,4 +1,5 @@
-import {App, PluginSettingTab, Setting} from "obsidian";
+import {App, Notice, PluginSettingTab, Setting} from "obsidian";
+import {getTaskNotesHealth} from "./fulcrum/taskNotesApi";
 import type {FulcrumSettings} from "./fulcrum/settingsDefaults";
 import type FulcrumPlugin from "./main";
 
@@ -28,7 +29,6 @@ export class FulcrumSettingTab extends PluginSettingTab {
 
 		heading(containerEl, "Folders");
 		this.textSetting("areasProjectsFolder", "Areas & projects folder");
-		this.textSetting("taskNotesFolder", "Task notes folder");
 		this.textSetting("meetingsFolder", "Meetings folder root");
 		this.textSetting("completedProjectsFolder", "Completed projects folder");
 		this.toggleSetting(
@@ -36,6 +36,36 @@ export class FulcrumSettingTab extends PluginSettingTab {
 			"Infer projects without type field",
 			"When on, every note under the areas & projects folder is treated as a project unless its type is the area value. Turn off to require an explicit project type in frontmatter.",
 		);
+		new Setting(containerEl)
+			.setName("Indicate project status by")
+			.setDesc(
+				"Whether Fulcrum reads each project’s status from frontmatter or from the folder layout under your areas & projects path.",
+			)
+			.addDropdown((d) =>
+				d
+					.addOptions({
+						frontmatter: "Frontmatter field",
+						subfolder: "Subfolder",
+					})
+					.setValue(this.plugin.settings.projectStatusIndication)
+					.onChange(async (v) => {
+						this.plugin.settings.projectStatusIndication = v as FulcrumSettings["projectStatusIndication"];
+						await this.plugin.saveSettings();
+						this.plugin.vaultIndex.scheduleRebuild();
+						this.display();
+					}),
+			);
+		if (this.plugin.settings.projectStatusIndication === "frontmatter") {
+			this.textSetting(
+				"projectStatusField",
+				"Project status field",
+			);
+		} else {
+			containerEl.createEl("p", {
+				cls: "fulcrum-settings-lead",
+				text: "Each immediate subfolder of your areas & projects folder is a status bucket. Notes directly in that folder use status “active” until you move them.",
+			});
+		}
 
 		heading(containerEl, "Frontmatter keys");
 		this.textSetting("typeField", "Note type field");
@@ -46,17 +76,48 @@ export class FulcrumSettingTab extends PluginSettingTab {
 		this.textSetting("taskStatusField", "Task status field");
 		this.textSetting("taskPriorityField", "Task / project priority field");
 		this.textSetting("taskDueDateField", "Task due date field");
+		this.textSetting("taskScheduledDateField", "Task scheduled date field");
 		this.textSetting("taskCompletedDateField", "Task completed date field");
+		this.textSetting("taskTrackedMinutesField", "Task tracked minutes field");
 		this.textSetting("taskTitleField", "Task title field");
+		this.textSetting("taskNoteYamlStatusOpen", "Task note status when open (vault fallback)");
+		this.textSetting("taskNoteYamlStatusDone", "Task note status when done (vault fallback)");
 		this.textSetting("meetingDateField", "Meeting date field");
 		this.textSetting("meetingDurationField", "Meeting duration field");
 		this.textSetting("meetingTotalMinutesField", "Meeting total minutes field");
 		this.textSetting("meetingTitleField", "Meeting title field");
 
-		heading(containerEl, "Task sources");
-		this.toggleSetting("taskNotesEnabled", "Enable task notes");
-		this.toggleSetting("inlineTasksEnabled", "Enable inline tasks (scanning not wired yet)");
-		this.textSetting("inlineTaskRegex", "Inline task regex (optional)");
+		heading(containerEl, "Tasks");
+		new Setting(containerEl)
+			.setName("Task sources")
+			.setDesc(
+				"Task notes: dedicated notes with your task tag or type: task. Obsidian tasks: markdown checkbox list items (- [ ]). Leave folder fields empty to scan the whole vault.",
+			)
+			.addDropdown((d) =>
+				d
+					.addOptions({
+						taskNotes: "Task notes only",
+						obsidianTasks: "Obsidian Tasks (inline) only",
+						both: "Both",
+					})
+					.setValue(this.plugin.settings.taskSourceMode)
+					.onChange(async (v) => {
+						this.plugin.settings.taskSourceMode = v as FulcrumSettings["taskSourceMode"];
+						await this.plugin.saveSettings();
+						this.plugin.vaultIndex.scheduleRebuild();
+					}),
+			);
+		this.textAreaSetting(
+			"taskNotesFolderPaths",
+			"Task notes folders",
+			"Vault-relative paths, one per line or comma-separated. Empty = entire vault.",
+		);
+		this.textAreaSetting(
+			"obsidianTasksFolderPaths",
+			"Inline task folders",
+			"Only markdown files under these paths are scanned for - [ ] tasks. Empty = entire vault.",
+		);
+		this.textSetting("inlineTaskRegex", "Inline task filter (regex, optional)");
 		new Setting(containerEl)
 			.setName("Tasks plugin integration")
 			.setDesc("Reserved for tasks plugin API detection.")
@@ -73,6 +134,48 @@ export class FulcrumSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		new Setting(containerEl)
+			.setName("TaskNotes HTTP API")
+			.setDesc(
+				"Desktop only. When enabled, Fulcrum can call TaskNotes’ local server (e.g. toggle-status). Enable the API in TaskNotes → Integrations. Docs: https://tasknotes.dev/HTTP_API/",
+			)
+			.addToggle((t) =>
+				t.setValue(this.plugin.settings.taskNotesHttpApiEnabled).onChange(async (v) => {
+					this.plugin.settings.taskNotesHttpApiEnabled = v;
+					await this.plugin.saveSettings();
+				}),
+			);
+		this.textSetting("taskNotesHttpApiBaseUrl", "TaskNotes API base URL");
+		const tokenRow = new Setting(containerEl).setName("TaskNotes API token (optional)");
+		tokenRow.addText((tx) => {
+			tx.inputEl.type = "password";
+			tx.setPlaceholder("Bearer token if set in TaskNotes").setValue(
+				this.plugin.settings.taskNotesHttpApiToken,
+			);
+			tx.onChange(async (v) => {
+				this.plugin.settings.taskNotesHttpApiToken = v;
+				await this.plugin.saveSettings();
+			});
+		});
+		tokenRow.addButton((b) =>
+			b.setButtonText("Test connection").onClick(async () => {
+				b.setDisabled(true);
+				const ac = new AbortController();
+				const to = window.setTimeout(() => ac.abort(), 10_000);
+				try {
+					const r = await getTaskNotesHealth(
+						this.plugin.settings.taskNotesHttpApiBaseUrl,
+						this.plugin.settings.taskNotesHttpApiToken || undefined,
+						ac.signal,
+					);
+					new Notice(r.ok ? "TaskNotes API reachable." : (r.error ?? "TaskNotes API check failed."));
+				} finally {
+					window.clearTimeout(to);
+					b.setDisabled(false);
+				}
+			}),
+		);
 
 		heading(containerEl, "Status & priority vocab");
 		this.textSetting("taskTag", "Task tag (YAML tags array)");
@@ -109,6 +212,16 @@ export class FulcrumSettingTab extends PluginSettingTab {
 			"Atomic note folder prefixes",
 			"One folder per line or comma-separated. Matches that path plus the current year (e.g. 60 Logs → 60 Logs/2026/…).",
 		);
+		new Setting(containerEl)
+			.setName("Linked note title field")
+			.setDesc("Frontmatter key and inline key:: for the primary line on project linked notes (often entry).")
+			.addText((t) =>
+				t.setValue(this.plugin.settings.atomicNoteEntryField).onChange(async (v) => {
+					this.plugin.settings.atomicNoteEntryField = v;
+					await this.plugin.saveSettings();
+					this.plugin.vaultIndex.scheduleRebuild();
+				}),
+			);
 		this.textSetting("projectLogSectionHeading", "Project log section heading");
 		new Setting(containerEl)
 			.setName("Project log preview lines")
@@ -124,6 +237,18 @@ export class FulcrumSettingTab extends PluginSettingTab {
 			);
 
 		heading(containerEl, "Display");
+		new Setting(containerEl)
+			.setName("Dashboard active projects group by")
+			.setDesc("Default grouping on the Fulcrum dashboard (you can also change it from the dashboard).")
+			.addDropdown((d) =>
+				d
+					.addOptions({area: "Group by area", status: "Group by status"})
+					.setValue(this.plugin.settings.dashboardActiveProjectsGroupBy)
+					.onChange(async (v) => {
+						this.plugin.settings.dashboardActiveProjectsGroupBy = v as FulcrumSettings["dashboardActiveProjectsGroupBy"];
+						await this.plugin.saveSettings();
+					}),
+			);
 		new Setting(containerEl)
 			.setName("Default project view")
 			.addDropdown((d) =>
@@ -161,6 +286,11 @@ export class FulcrumSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		containerEl.createEl("p", {
+			cls: "fulcrum-settings-lead",
+			text: "Install into a vault: add a repo-root file fulcrum-vault.path with your vault path (see fulcrum-vault.path.example), then npm run build:install — or pass the path after -- : npm run build:install -- \"/path/to/Vault\"",
+		});
 	}
 
 	private textAreaSetting<K extends keyof FulcrumSettings>(

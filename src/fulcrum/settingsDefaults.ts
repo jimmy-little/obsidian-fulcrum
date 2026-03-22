@@ -1,6 +1,8 @@
+export type TaskSourceMode = "taskNotes" | "obsidianTasks" | "both";
+export type ProjectStatusIndication = "frontmatter" | "subfolder";
+
 export interface FulcrumSettings {
 	areasProjectsFolder: string;
-	taskNotesFolder: string;
 	meetingsFolder: string;
 	completedProjectsFolder: string;
 	/** When true, markdown under the areas/projects folder is a project unless `type` is the area value. */
@@ -14,17 +16,27 @@ export interface FulcrumSettings {
 	taskStatusField: string;
 	taskPriorityField: string;
 	taskDueDateField: string;
+	taskScheduledDateField: string;
 	taskCompletedDateField: string;
+	taskTrackedMinutesField: string;
 	taskTitleField: string;
+	taskNoteYamlStatusOpen: string;
+	taskNoteYamlStatusDone: string;
 	meetingDateField: string;
 	meetingDurationField: string;
 	meetingTotalMinutesField: string;
 	meetingTitleField: string;
 
-	taskNotesEnabled: boolean;
-	inlineTasksEnabled: boolean;
+	taskSourceMode: TaskSourceMode;
+	/** Multi-line or comma-separated; empty = whole vault. */
+	taskNotesFolderPaths: string;
+	obsidianTasksFolderPaths: string;
 	inlineTaskRegex: string;
 	tasksPluginMode: "auto-detect" | "off" | "force";
+
+	taskNotesHttpApiEnabled: boolean;
+	taskNotesHttpApiBaseUrl: string;
+	taskNotesHttpApiToken: string;
 
 	taskTag: string;
 	taskStatuses: string;
@@ -39,6 +51,10 @@ export interface FulcrumSettings {
 	showRibbonIcon: boolean;
 	dateDisplayFormat: string;
 	completionThresholdPercent: number;
+	dashboardActiveProjectsGroupBy: "area" | "status";
+
+	projectStatusIndication: ProjectStatusIndication;
+	projectStatusField: string;
 
 	/** Frontmatter keys on the project note (review / launch). */
 	projectLaunchDateField: string;
@@ -50,6 +66,8 @@ export interface FulcrumSettings {
 	defaultReviewFrequencyDays: number;
 	/** One vault folder per line or comma-separated; matches `folder/YYYY/...` and `folder/...`. */
 	atomicNoteFolderPrefixes: string;
+	/** Frontmatter key and inline `key::` for primary line on linked notes. */
+	atomicNoteEntryField: string;
 	/** Markdown heading Fulcrum creates/uses when appending log lines to the project file. */
 	projectLogSectionHeading: string;
 	projectLogPreviewMaxLines: number;
@@ -60,7 +78,6 @@ export interface FulcrumSettings {
 
 export const DEFAULT_SETTINGS: FulcrumSettings = {
 	areasProjectsFolder: "40 Projects",
-	taskNotesFolder: "35 Tasks/TaskNotes",
 	meetingsFolder: "30 Work/Meetings",
 	completedProjectsFolder: "40 Projects/Completed",
 	inferProjectsInAreasFolder: true,
@@ -73,17 +90,26 @@ export const DEFAULT_SETTINGS: FulcrumSettings = {
 	taskStatusField: "status",
 	taskPriorityField: "priority",
 	taskDueDateField: "dueDate",
+	taskScheduledDateField: "scheduled",
 	taskCompletedDateField: "completedDate",
+	taskTrackedMinutesField: "totalMinutesTracked",
 	taskTitleField: "title",
+	taskNoteYamlStatusOpen: "NONE",
+	taskNoteYamlStatusDone: "DONE",
 	meetingDateField: "date",
 	meetingDurationField: "duration",
 	meetingTotalMinutesField: "totalMinutesTracked",
 	meetingTitleField: "entry",
 
-	taskNotesEnabled: true,
-	inlineTasksEnabled: true,
+	taskSourceMode: "both",
+	taskNotesFolderPaths: "35 Tasks/TaskNotes",
+	obsidianTasksFolderPaths: "",
 	inlineTaskRegex: "",
 	tasksPluginMode: "auto-detect",
+
+	taskNotesHttpApiEnabled: false,
+	taskNotesHttpApiBaseUrl: "http://localhost:8080",
+	taskNotesHttpApiToken: "",
 
 	taskTag: "task",
 	taskStatuses: "todo, in-progress, done, cancelled",
@@ -98,6 +124,10 @@ export const DEFAULT_SETTINGS: FulcrumSettings = {
 	showRibbonIcon: true,
 	dateDisplayFormat: "YYYY-MM-DD",
 	completionThresholdPercent: 100,
+	dashboardActiveProjectsGroupBy: "area",
+
+	projectStatusIndication: "frontmatter",
+	projectStatusField: "status",
 
 	projectLaunchDateField: "launchDate",
 	projectLastReviewedField: "lastReviewed",
@@ -107,6 +137,7 @@ export const DEFAULT_SETTINGS: FulcrumSettings = {
 	defaultReviewFrequencyDays: 7,
 	atomicNoteFolderPrefixes:
 		"60 Logs\n70 Journal/Atomic\n30 Work/Meetings\n30 Work/Notes",
+	atomicNoteEntryField: "entry",
 	projectLogSectionHeading: "## Fulcrum log",
 	projectLogPreviewMaxLines: 12,
 

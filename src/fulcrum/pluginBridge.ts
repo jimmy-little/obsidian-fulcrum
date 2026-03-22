@@ -1,6 +1,7 @@
-import type {App} from "obsidian";
+import type {App, WorkspaceLeaf} from "obsidian";
 import type {FulcrumSettings} from "./settingsDefaults";
 import type {VaultIndex} from "./VaultIndex";
+import type {IndexedTask} from "./types";
 
 /** Narrow surface passed into Svelte views (avoids circular imports). */
 export interface FulcrumHost {
@@ -15,4 +16,13 @@ export interface FulcrumHost {
 	loadProjectLogPreview(projectPath: string): Promise<string[]>;
 	notifyNewNoteFromProject(projectPath: string): void;
 	notifyNewTaskFromProject(projectPath: string): void;
+	openIndexedTask(task: IndexedTask): void;
+	toggleIndexedTask(task: IndexedTask): Promise<void>;
+	patchSettings(partial: Partial<FulcrumSettings>): Promise<void>;
+	triggerFulcrumHoverLink(
+		event: MouseEvent,
+		hoverParent: WorkspaceLeaf,
+		targetEl: HTMLElement,
+		path: string,
+	): void;
 }

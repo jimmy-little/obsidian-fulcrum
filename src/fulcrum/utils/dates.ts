@@ -64,6 +64,14 @@ export function formatShortMonthDay(iso: string | undefined): string {
 	);
 }
 
+export function formatTrackedMinutesShort(n: number): string {
+	if (n < 1) return "";
+	if (n < 60) return `${n}m`;
+	const h = Math.floor(n / 60);
+	const m = n % 60;
+	return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 export function urgencyColorForDays(days: number | null): string {
 	if (days === null) return "var(--text-accent)";
 	if (days < 2) return "#e74c3c";

@@ -1,23 +1,40 @@
 <script lang="ts">
+	import type {WorkspaceLeaf} from "obsidian";
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import {indexRevision} from "../fulcrum/stores";
 	import {parseList} from "../fulcrum/settingsDefaults";
-	import type {IndexedTask} from "../fulcrum/types";
+	import type {AtomicNoteRow, ProjectRollup} from "../fulcrum/types";
 	import {
 		daysUntilCalendar,
 		formatShortMonthDay,
+		formatTrackedMinutesShort,
 		urgencyColorForDays,
 	} from "../fulcrum/utils/dates";
 	import {preferLightForegroundOnSolidHex} from "../fulcrum/utils/projectVisual";
+	import TaskCard from "./TaskCard.svelte";
 
 	export let plugin: FulcrumHost;
 	export let projectPath: string;
+	export let hoverParentLeaf: WorkspaceLeaf | undefined = undefined;
 
-	let rollup = plugin.vaultIndex.getProjectRollup(projectPath, plugin.settings);
+	let rollup: ProjectRollup | null = null;
+	let rollupLoadId = 0;
+	let rollupMissing = false;
+
 	$: rev = $indexRevision;
 	$: {
 		void rev;
-		rollup = plugin.vaultIndex.getProjectRollup(projectPath, plugin.settings);
+		void projectPath;
+		if (!plugin.vaultIndex.resolveProjectByPath(projectPath)) {
+			rollupMissing = true;
+			rollup = null;
+		} else {
+			rollupMissing = false;
+			const id = ++rollupLoadId;
+			void plugin.vaultIndex.getProjectRollup(projectPath, plugin.settings).then((r) => {
+				if (id === rollupLoadId) rollup = r;
+			});
+		}
 	}
 
 	let logLines: string[] = [];
@@ -50,16 +67,18 @@
 		}
 	}
 
-	function statusIcon(t: IndexedTask): string {
-		return doneTask.has(t.status) ? "☑" : "☐";
+	function openNoteRow(n: AtomicNoteRow): void {
+		openPath(n.file.path);
 	}
 
-	function formatTrackedMinutes(total: number): string {
-		if (total < 1) return "0m";
-		if (total < 60) return `${total}m`;
-		const h = Math.floor(total / 60);
-		const m = total % 60;
-		return m > 0 ? `${h}h ${m}m` : `${h}h`;
+	function onNoteHover(ev: MouseEvent, n: AtomicNoteRow): void {
+		if (!hoverParentLeaf) return;
+		plugin.triggerFulcrumHoverLink(
+			ev,
+			hoverParentLeaf,
+			ev.currentTarget as HTMLElement,
+			n.file.path,
+		);
 	}
 
 	function jiraHref(raw: string | undefined): string | null {
@@ -133,8 +152,10 @@
 	}
 </script>
 
-{#if !rollup}
+{#if rollupMissing}
 	<p class="fulcrum-muted">Project not found in index. Check folder settings and frontmatter.</p>
+{:else if !rollup}
+	<p class="fulcrum-muted">Loading project…</p>
 {:else}
 	<div
 		class="fulcrum-project"
@@ -245,7 +266,7 @@
 		<div class="fulcrum-hero-row fulcrum-hero-row--quad">
 			<div class="fulcrum-mega-stat fulcrum-mega-stat--neutral">
 				<div class="fulcrum-mega-stat__value">
-					{formatTrackedMinutes(rollup.aggregatedTrackedMinutes)}
+					{formatTrackedMinutesShort(rollup.aggregatedTrackedMinutes) || "0m"}
 				</div>
 				<div class="fulcrum-mega-stat__label">Time tracked</div>
 			</div>
@@ -270,15 +291,10 @@
 			{#if rollup.nextTasks.length === 0}
 				<p class="fulcrum-muted">No open tasks linked to this project.</p>
 			{:else}
-				<ul class="fulcrum-task-list">
+				<ul class="fulcrum-task-list fulcrum-task-agenda-list">
 					{#each rollup.nextTasks.slice(0, 8) as t}
 						<li>
-							<button type="button" class="fulcrum-linklike" on:click={() => openPath(t.file.path)}>
-								<span>{statusIcon(t)}</span>
-								<span>{t.title}</span>
-								{#if t.dueDate}<span class="fulcrum-muted">due {t.dueDate.slice(0, 10)}</span>{/if}
-								{#if t.priority}<span class="fulcrum-tag">{t.priority}</span>{/if}
-							</button>
+							<TaskCard plugin={plugin} task={t} done={false} showProjectLink={false} />
 						</li>
 					{/each}
 				</ul>
@@ -291,33 +307,32 @@
 			<div class="fulcrum-block">
 				<h3 class="fulcrum-block__title">Tasks</h3>
 				{#if rollup.tasks.length === 0}
-					<p class="fulcrum-muted">No TaskNotes in your task folder link to this project.</p>
+					<p class="fulcrum-muted">No tasks in your indexed sources link to this project.</p>
 				{:else}
-					<div class="fulcrum-table-wrap">
-						<table class="fulcrum-table">
-							<thead>
-								<tr>
-									<th>Task</th>
-									<th>Status</th>
-									<th>Due</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each rollup.tasks as t}
-									<tr>
-										<td>
-											<button type="button" class="fulcrum-linklike fulcrum-table__link" on:click={() => openPath(t.file.path)}>
-												{statusIcon(t)}
-												{t.title}
-											</button>
-										</td>
-										<td>{t.status}</td>
-										<td>{t.dueDate?.slice(0, 10) ?? "—"}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
+					<h4 class="fulcrum-block__subtitle">Open</h4>
+					{#if rollup.tasks.filter((t) => !doneTask.has(t.status)).length === 0}
+						<p class="fulcrum-muted">No open tasks.</p>
+					{:else}
+						<ul class="fulcrum-task-list fulcrum-task-agenda-list">
+							{#each rollup.tasks.filter((t) => !doneTask.has(t.status)) as t}
+								<li>
+									<TaskCard plugin={plugin} task={t} done={false} showProjectLink={false} />
+								</li>
+							{/each}
+						</ul>
+					{/if}
+					<h4 class="fulcrum-block__subtitle">Completed</h4>
+					{#if rollup.tasks.filter((t) => doneTask.has(t.status)).length === 0}
+						<p class="fulcrum-muted">No completed tasks indexed.</p>
+					{:else}
+						<ul class="fulcrum-task-list fulcrum-task-agenda-list">
+							{#each rollup.tasks.filter((t) => doneTask.has(t.status)) as t}
+								<li>
+									<TaskCard plugin={plugin} task={t} done={true} showProjectLink={false} />
+								</li>
+							{/each}
+						</ul>
+					{/if}
 				{/if}
 			</div>
 
@@ -328,32 +343,55 @@
 				{:else if rollup.atomicNotes.length === 0}
 					<p class="fulcrum-muted">No linked notes under your configured folders for this year.</p>
 				{:else}
-					<div class="fulcrum-table-wrap">
-						<table class="fulcrum-table">
-							<thead>
-								<tr>
-									<th>Note</th>
-									<th>Status</th>
-									<th>Date</th>
-									<th>Time</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each rollup.atomicNotes as n}
-									<tr>
-										<td>
-											<button type="button" class="fulcrum-linklike fulcrum-table__link" on:click={() => openPath(n.file.path)}>
-												{n.file.basename.replace(/\.md$/i, "")}
+					<ul class="fulcrum-task-list fulcrum-task-agenda-list fulcrum-note-agenda-list">
+						{#each rollup.atomicNotes as n}
+							<li>
+								<div
+									class="fulcrum-task-card fulcrum-note-row"
+									data-priority={n.priority === "high" ? "high" : n.priority === "low" ? "low" : ""}
+									role="group"
+									aria-label={n.entryTitle}
+									on:mouseenter={(ev) => onNoteHover(ev, n)}
+								>
+									<div class="fulcrum-task-card__main-row fulcrum-note-row__main">
+										<span class="fulcrum-note-row__spacer" aria-hidden="true" />
+										<div class="fulcrum-task-card__content fulcrum-note-row__content">
+											<button
+												type="button"
+												class="fulcrum-task-card__title"
+												on:click={() => openNoteRow(n)}
+											>
+												<span class="fulcrum-task-card__title-text">{n.entryTitle}</span>
 											</button>
-										</td>
-										<td>{n.status ?? "—"}</td>
-										<td>{n.dateDisplay}</td>
-										<td>{n.trackedMinutes > 0 ? `${n.trackedMinutes}m` : "—"}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
+											{#if n.bodyPreview}
+												<p class="fulcrum-note-row__preview">{n.bodyPreview}</p>
+											{/if}
+											{#if n.dateDisplay || n.noteType || n.tags.length > 0 || n.trackedMinutes > 0}
+												<div class="fulcrum-task-card__metadata">
+													<div class="fulcrum-task-card__metadata-chips">
+														{#if n.dateDisplay}
+															<span class="fulcrum-task-card__note-date">{n.dateDisplay}</span>
+														{/if}
+														{#if n.noteType}
+															<span class="fulcrum-task-card__note-type">{n.noteType}</span>
+														{/if}
+														{#each n.tags as tag}
+															<span class="fulcrum-task-card__tag">#{tag}</span>
+														{/each}
+													</div>
+													{#if n.trackedMinutes > 0}
+														<span class="fulcrum-task-card__tracked"
+															>{formatTrackedMinutesShort(n.trackedMinutes)}</span
+														>
+													{/if}
+												</div>
+											{/if}
+										</div>
+									</div>
+								</div>
+							</li>
+						{/each}
+					</ul>
 				{/if}
 			</div>
 		</section>
