@@ -1,0 +1,18 @@
+import type {App} from "obsidian";
+import type {FulcrumSettings} from "./settingsDefaults";
+import type {VaultIndex} from "./VaultIndex";
+
+/** Narrow surface passed into Svelte views (avoids circular imports). */
+export interface FulcrumHost {
+	readonly app: App;
+	readonly settings: FulcrumSettings;
+	readonly vaultIndex: VaultIndex;
+	openProjectSummary(path: string): Promise<void>;
+	openDashboard(): Promise<void>;
+	refreshIndex(): Promise<void>;
+	appendProjectLogEntry(projectPath: string, text: string): Promise<void>;
+	markProjectReviewed(projectPath: string): Promise<void>;
+	loadProjectLogPreview(projectPath: string): Promise<string[]>;
+	notifyNewNoteFromProject(projectPath: string): void;
+	notifyNewTaskFromProject(projectPath: string): void;
+}

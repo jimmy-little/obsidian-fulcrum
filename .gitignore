@@ -1,0 +1,32 @@
+# vscode
+.vscode 
+
+# Intellij
+*.iml
+.idea
+
+# npm
+node_modules
+
+# Don't include the compiled main.js file in the repo.
+# They should be uploaded to GitHub releases instead.
+main.js
+
+# Exclude sourcemaps
+*.map
+
+# obsidian
+data.json
+
+# Local vault path for npm run build:install (see fulcrum-vault.path.example)
+fulcrum-vault.path
+
+# Local backup of an old bundled main.js (keep on your machine; do not publish)
+main-restore.js
+
+# Scratch notes in repo root
+test daily note.md
+test project.md
+
+# Exclude macOS Finder (System Explorer) View States
+.DS_Store

@@ -1,0 +1,210 @@
+/*
+
+This CSS file will be included with your plugin, and
+available in the app when your plugin is enabled.
+
+If your plugin does not need CSS, delete this file.
+
+*/
+
+.fulcrum-settings-lead {
+	color: var(--text-muted);
+	margin-bottom: 1em;
+}
+
+.fulcrum-muted {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.fulcrum-project-banner--simple {
+	margin-bottom: 1.25rem;
+}
+
+.fulcrum-project-banner--simple h1 {
+	margin: 0;
+	font-size: var(--font-ui-large);
+}
+
+.fulcrum-section {
+	margin-top: 0.5rem;
+}
+
+.fulcrum-tasks-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem 1rem;
+	margin-bottom: 0.75rem;
+}
+
+.fulcrum-tasks-head h2 {
+	margin: 0;
+	font-size: var(--font-ui-medium);
+}
+
+.fulcrum-tasks-head__actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.fulcrum-modal-hint {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	margin-top: 0;
+}
+
+.fulcrum-new-task-editor-host {
+	margin: 0.75rem 0;
+}
+
+.fulcrum-modal-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 0.5rem;
+	margin-top: 1rem;
+}
+
+/*
+ * Obsidian app.css: `button:not(.clickable-icon)` uses --interactive-normal + --input-shadow.
+ * Override variables + long selectors so theme “default button” styling loses.
+ */
+.workspace-leaf-content .fulcrum-task-card button.fulcrum-task-card__title:not(.clickable-icon),
+.workspace-leaf-content .fulcrum-view-root button.fulcrum-task-card__title:not(.clickable-icon),
+.workspace-leaf-content .fulcrum-task-list button.fulcrum-task-card__title:not(.clickable-icon),
+.workspace-leaf-content .fulcrum-task-agenda-list button.fulcrum-task-card__title:not(.clickable-icon),
+.workspace-leaf-content .fulcrum-note-agenda-list button.fulcrum-task-card__title:not(.clickable-icon),
+.fulcrum-task-card button.fulcrum-task-card__title:not(.clickable-icon),
+.fulcrum-view-root button.fulcrum-task-card__title:not(.clickable-icon),
+.fulcrum-task-list button.fulcrum-task-card__title:not(.clickable-icon),
+.fulcrum-task-agenda-list button.fulcrum-task-card__title:not(.clickable-icon),
+.fulcrum-note-agenda-list button.fulcrum-task-card__title:not(.clickable-icon) {
+	--input-shadow: none !important;
+	--shadow-s: none !important;
+	--shadow-l: none !important;
+	background: transparent !important;
+	background-color: transparent !important;
+	box-shadow: none !important;
+	border: none !important;
+	border-width: 0 !important;
+	outline: none !important;
+	-webkit-appearance: none;
+	appearance: none;
+}
+
+.workspace-leaf-content .fulcrum-task-card button.fulcrum-task-card__title:not(.clickable-icon):hover,
+.workspace-leaf-content .fulcrum-task-card button.fulcrum-task-card__title:not(.clickable-icon):focus,
+.workspace-leaf-content .fulcrum-task-card button.fulcrum-task-card__title:not(.clickable-icon):focus-visible,
+.workspace-leaf-content .fulcrum-task-card button.fulcrum-task-card__title:not(.clickable-icon):active,
+.workspace-leaf-content .fulcrum-view-root button.fulcrum-task-card__title:not(.clickable-icon):hover,
+.workspace-leaf-content .fulcrum-view-root button.fulcrum-task-card__title:not(.clickable-icon):focus,
+.workspace-leaf-content .fulcrum-view-root button.fulcrum-task-card__title:not(.clickable-icon):focus-visible,
+.workspace-leaf-content .fulcrum-view-root button.fulcrum-task-card__title:not(.clickable-icon):active,
+.workspace-leaf-content .fulcrum-task-list button.fulcrum-task-card__title:not(.clickable-icon):hover,
+.workspace-leaf-content .fulcrum-task-list button.fulcrum-task-card__title:not(.clickable-icon):focus,
+.workspace-leaf-content .fulcrum-task-list button.fulcrum-task-card__title:not(.clickable-icon):focus-visible,
+.workspace-leaf-content .fulcrum-task-list button.fulcrum-task-card__title:not(.clickable-icon):active,
+.workspace-leaf-content .fulcrum-task-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):hover,
+.workspace-leaf-content .fulcrum-task-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):focus,
+.workspace-leaf-content .fulcrum-task-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):focus-visible,
+.workspace-leaf-content .fulcrum-task-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):active,
+.workspace-leaf-content .fulcrum-note-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):hover,
+.workspace-leaf-content .fulcrum-note-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):focus,
+.workspace-leaf-content .fulcrum-note-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):focus-visible,
+.workspace-leaf-content .fulcrum-note-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):active,
+.fulcrum-task-card button.fulcrum-task-card__title:not(.clickable-icon):hover,
+.fulcrum-task-card button.fulcrum-task-card__title:not(.clickable-icon):focus,
+.fulcrum-task-card button.fulcrum-task-card__title:not(.clickable-icon):focus-visible,
+.fulcrum-task-card button.fulcrum-task-card__title:not(.clickable-icon):active,
+.fulcrum-view-root button.fulcrum-task-card__title:not(.clickable-icon):hover,
+.fulcrum-view-root button.fulcrum-task-card__title:not(.clickable-icon):focus,
+.fulcrum-view-root button.fulcrum-task-card__title:not(.clickable-icon):focus-visible,
+.fulcrum-view-root button.fulcrum-task-card__title:not(.clickable-icon):active,
+.fulcrum-task-list button.fulcrum-task-card__title:not(.clickable-icon):hover,
+.fulcrum-task-list button.fulcrum-task-card__title:not(.clickable-icon):focus,
+.fulcrum-task-list button.fulcrum-task-card__title:not(.clickable-icon):focus-visible,
+.fulcrum-task-list button.fulcrum-task-card__title:not(.clickable-icon):active,
+.fulcrum-task-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):hover,
+.fulcrum-task-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):focus,
+.fulcrum-task-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):focus-visible,
+.fulcrum-task-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):active,
+.fulcrum-note-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):hover,
+.fulcrum-note-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):focus,
+.fulcrum-note-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):focus-visible,
+.fulcrum-note-agenda-list button.fulcrum-task-card__title:not(.clickable-icon):active {
+	--input-shadow: none !important;
+	--shadow-s: none !important;
+	--shadow-l: none !important;
+	background: transparent !important;
+	background-color: transparent !important;
+	box-shadow: none !important;
+	border: none !important;
+	border-width: 0 !important;
+	outline: none !important;
+}
+
+/* Date + type + tags: same pill family (muted; type is not a link-styled chip) */
+.fulcrum-task-card__note-date {
+	display: inline-flex;
+	align-items: center;
+	font-weight: 500;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	background: color-mix(in srgb, var(--background-modifier-border) 45%, var(--background-primary));
+	padding: 0.12rem 0.35rem;
+	border-radius: var(--radius-s);
+	border: 1px solid transparent;
+}
+
+.fulcrum-task-card__note-type,
+button.fulcrum-task-card__note-type {
+	display: inline-flex;
+	align-items: center;
+	font-weight: 500;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted) !important;
+	background: var(--background-secondary) !important;
+	border: 1px solid var(--background-modifier-border);
+	padding: 0.12rem 0.4rem;
+	border-radius: var(--radius-s);
+	box-shadow: none !important;
+	text-decoration: none !important;
+}
+
+/* If type was rendered as an internal link, keep pill look (no blue wikilink styling). */
+.fulcrum-task-card__note-type.internal-link,
+.fulcrum-task-card__note-type a.internal-link {
+	color: var(--text-muted) !important;
+	text-decoration: none !important;
+	background: transparent !important;
+}
+
+button.fulcrum-task-card__note-type {
+	cursor: pointer;
+	font: inherit;
+	line-height: inherit;
+	outline: none;
+}
+
+button.fulcrum-task-card__note-type:hover,
+button.fulcrum-task-card__note-type:focus-visible {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+	border-color: var(--background-modifier-border-hover);
+	box-shadow: none !important;
+}
+
+.fulcrum-task-card__tag {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.12rem 0.4rem;
+	border-radius: var(--radius-s);
+	font-size: var(--font-ui-smaller);
+	font-weight: 500;
+	color: var(--text-muted);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+}

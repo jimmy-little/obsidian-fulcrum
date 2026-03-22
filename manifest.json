@@ -1,0 +1,9 @@
+{
+	"id": "fulcrum",
+	"name": "Fulcrum",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Project views: inline tasks on project notes and TaskNotes integration.",
+	"author": "",
+	"isDesktopOnly": false
+}

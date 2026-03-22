@@ -1,0 +1,94 @@
+import type {TFile} from "obsidian";
+
+export interface IndexedArea {
+	file: TFile;
+	name: string;
+	status?: string;
+	color?: string;
+	icon?: string;
+	description?: string;
+}
+
+export interface IndexedProject {
+	file: TFile;
+	name: string;
+	status: string;
+	priority?: string;
+	startDate?: string;
+	dueDate?: string;
+	completedDate?: string;
+	areaFile: TFile | null;
+	areaName?: string;
+	/** Raw frontmatter (wikilink, URL, or path) for banner image. */
+	banner?: string;
+	/** Raw frontmatter color token or CSS color. */
+	color?: string;
+}
+
+export interface IndexedTask {
+	file: TFile;
+	title: string;
+	status: string;
+	priority?: string;
+	dueDate?: string;
+	completedDate?: string;
+	projectFile: TFile | null;
+	areaFile: TFile | null;
+}
+
+export interface IndexedMeeting {
+	file: TFile;
+	date?: string;
+	title?: string;
+	duration?: number;
+	totalMinutesTracked?: number;
+	projectFile: TFile | null;
+}
+
+export interface AtomicNoteRow {
+	file: TFile;
+	status?: string;
+	dateSort: string;
+	dateDisplay: string;
+	trackedMinutes: number;
+}
+
+export interface ProjectPageMeta {
+	launchDate?: string;
+	lastReviewed?: string;
+	nextReview?: string;
+	reviewFrequencyDays: number;
+	jira?: string;
+	description?: string;
+}
+
+export interface ProjectRollup {
+	project: IndexedProject;
+	tasks: IndexedTask[];
+	meetings: IndexedMeeting[];
+	/** TaskNotes (and similar) linked to this project. */
+	atomicNotes: AtomicNoteRow[];
+	totalTasks: number;
+	doneTasks: number;
+	openTasks: number;
+	overdueTasks: number;
+	completionRatio: number;
+	nextTasks: IndexedTask[];
+	/** Task + atomic + project self + meetings not already counted in atomic rows. */
+	aggregatedTrackedMinutes: number;
+	pageMeta: ProjectPageMeta;
+
+	bannerImageSrc: string | null;
+	/** Resolved CSS color for accents, charts, and solid banner fallback. */
+	accentColorCss: string;
+	hasBannerImage: boolean;
+	hasProjectColor: boolean;
+}
+
+export interface IndexSnapshot {
+	areas: IndexedArea[];
+	projects: IndexedProject[];
+	tasks: IndexedTask[];
+	meetings: IndexedMeeting[];
+	rebuiltAt: number;
+}
