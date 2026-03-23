@@ -75,7 +75,7 @@
 	}
 
 	function noteChipsNext(n: AtomicNoteRow): import("../fulcrum/utils/projectActivity").ActivityChip[] {
-		const c: import("../fulcrum/utils/projectActivity").ActivityChip[] = [{kind: "tag", label: "#note"}];
+		const c: import("../fulcrum/utils/projectActivity").ActivityChip[] = [];
 		if (n.dateDisplay) c.push({kind: "date", label: n.dateDisplay});
 		if (n.noteType) c.push({kind: "type", label: n.noteType.replace(/\[\[(?:[^\]|]+\|)?([^\]]+)\]\]/g, "$1")});
 		for (const t of n.tags) c.push({kind: "tag", label: `#${t}`});

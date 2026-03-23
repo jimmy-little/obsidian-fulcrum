@@ -31,7 +31,7 @@ function stripWikilinks(s: string): string {
 }
 
 function chipsForNote(n: AtomicNoteRow, formatTracked: (n: number) => string): ActivityChip[] {
-	const c: ActivityChip[] = [{kind: "tag", label: "#note"}];
+	const c: ActivityChip[] = [];
 	if (n.dateDisplay) c.push({kind: "date", label: n.dateDisplay});
 	if (n.noteType) c.push({kind: "type", label: stripWikilinks(n.noteType)});
 	for (const t of n.tags) c.push({kind: "tag", label: `#${t}`});
@@ -41,7 +41,7 @@ function chipsForNote(n: AtomicNoteRow, formatTracked: (n: number) => string): A
 }
 
 function chipsForTask(t: IndexedTask, formatTracked: (n: number) => string): ActivityChip[] {
-	const c: ActivityChip[] = [{kind: "tag", label: "#task"}];
+	const c: ActivityChip[] = [];
 	if (t.dueDate) c.push({kind: "date", label: `due ${t.dueDate.slice(0, 10)}`});
 	if (t.scheduledDate) c.push({kind: "date", label: `sched ${t.scheduledDate.slice(0, 10)}`});
 	if (t.completedDate) c.push({kind: "date", label: `done ${t.completedDate.slice(0, 10)}`});
@@ -53,13 +53,13 @@ function chipsForTask(t: IndexedTask, formatTracked: (n: number) => string): Act
 }
 
 function chipsForLog(e: ProjectLogActivityEntry): ActivityChip[] {
-	const c: ActivityChip[] = [{kind: "tag", label: "#log"}];
+	const c: ActivityChip[] = [];
 	if (e.stampLabel) c.push({kind: "date", label: e.stampLabel});
 	return c;
 }
 
 function chipsForMeeting(m: IndexedMeeting, formatTracked: (n: number) => string): ActivityChip[] {
-	const c: ActivityChip[] = [{kind: "tag", label: "#meeting"}];
+	const c: ActivityChip[] = [];
 	if (m.date?.trim()) c.push({kind: "date", label: m.date.slice(0, 10)});
 	if (m.duration != null && Number.isFinite(m.duration)) c.push({kind: "tracked", label: `${m.duration}m`});
 	if (m.totalMinutesTracked != null && m.totalMinutesTracked > 0) {
