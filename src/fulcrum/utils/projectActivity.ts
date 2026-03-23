@@ -2,12 +2,19 @@ import type {ProjectLogActivityEntry} from "../projectNote";
 import type {AtomicNoteRow, IndexedMeeting, IndexedTask, ProjectRollup} from "../types";
 import {isISODateTodayOrFuture} from "./dates";
 
+export type ChipKind = "tag" | "date" | "type" | "tracked" | "status" | "misc";
+
+export type ActivityChip = {
+	kind: ChipKind;
+	label: string;
+};
+
 export type ActivityRowModel = {
 	id: string;
 	kind: "note" | "task" | "log" | "meeting";
 	sortMs: number;
 	title: string;
-	chips: string[];
+	chips: ActivityChip[];
 	open: () => void;
 	hoverPath?: string;
 };
@@ -18,43 +25,45 @@ export type NextUpItem = {
 	note?: AtomicNoteRow;
 };
 
-function chipsForNote(n: AtomicNoteRow, formatTracked: (n: number) => string): string[] {
-	const c: string[] = ["#note"];
-	if (n.dateDisplay) c.push(n.dateDisplay);
-	if (n.noteType) c.push(n.noteType);
-	for (const t of n.tags) {
-		c.push(`#${t}`);
-	}
-	if (n.trackedMinutes > 0) c.push(formatTracked(n.trackedMinutes));
-	if (n.priority) c.push(n.priority);
+/** Strip `[[…]]` wikilink syntax, returning the display text. */
+function stripWikilinks(s: string): string {
+	return s.replace(/\[\[(?:[^\]|]+\|)?([^\]]+)\]\]/g, "$1");
+}
+
+function chipsForNote(n: AtomicNoteRow, formatTracked: (n: number) => string): ActivityChip[] {
+	const c: ActivityChip[] = [{kind: "tag", label: "#note"}];
+	if (n.dateDisplay) c.push({kind: "date", label: n.dateDisplay});
+	if (n.noteType) c.push({kind: "type", label: stripWikilinks(n.noteType)});
+	for (const t of n.tags) c.push({kind: "tag", label: `#${t}`});
+	if (n.trackedMinutes > 0) c.push({kind: "tracked", label: formatTracked(n.trackedMinutes)});
+	if (n.priority) c.push({kind: "misc", label: n.priority});
 	return c;
 }
 
-function chipsForTask(t: IndexedTask, formatTracked: (n: number) => string): string[] {
-	const c: string[] = ["#task", t.status];
-	if (t.dueDate) c.push(`due ${t.dueDate.slice(0, 10)}`);
-	if (t.scheduledDate) c.push(`sched ${t.scheduledDate.slice(0, 10)}`);
-	if (t.completedDate) c.push(`done ${t.completedDate.slice(0, 10)}`);
-	if (t.priority) c.push(t.priority);
-	if (t.trackedMinutes > 0) c.push(formatTracked(t.trackedMinutes));
-	for (const tag of t.tags) {
-		c.push(`#${tag}`);
-	}
+function chipsForTask(t: IndexedTask, formatTracked: (n: number) => string): ActivityChip[] {
+	const c: ActivityChip[] = [{kind: "tag", label: "#task"}];
+	if (t.dueDate) c.push({kind: "date", label: `due ${t.dueDate.slice(0, 10)}`});
+	if (t.scheduledDate) c.push({kind: "date", label: `sched ${t.scheduledDate.slice(0, 10)}`});
+	if (t.completedDate) c.push({kind: "date", label: `done ${t.completedDate.slice(0, 10)}`});
+	c.push({kind: "status", label: t.status});
+	if (t.priority) c.push({kind: "misc", label: t.priority});
+	for (const tag of t.tags) c.push({kind: "tag", label: `#${tag}`});
+	if (t.trackedMinutes > 0) c.push({kind: "tracked", label: formatTracked(t.trackedMinutes)});
 	return c;
 }
 
-function chipsForLog(e: ProjectLogActivityEntry): string[] {
-	const c: string[] = ["#log"];
-	if (e.stampLabel) c.push(e.stampLabel);
+function chipsForLog(e: ProjectLogActivityEntry): ActivityChip[] {
+	const c: ActivityChip[] = [{kind: "tag", label: "#log"}];
+	if (e.stampLabel) c.push({kind: "date", label: e.stampLabel});
 	return c;
 }
 
-function chipsForMeeting(m: IndexedMeeting, formatTracked: (n: number) => string): string[] {
-	const c: string[] = ["#meeting"];
-	if (m.date?.trim()) c.push(m.date.slice(0, 10));
-	if (m.duration != null && Number.isFinite(m.duration)) c.push(`${m.duration}m`);
+function chipsForMeeting(m: IndexedMeeting, formatTracked: (n: number) => string): ActivityChip[] {
+	const c: ActivityChip[] = [{kind: "tag", label: "#meeting"}];
+	if (m.date?.trim()) c.push({kind: "date", label: m.date.slice(0, 10)});
+	if (m.duration != null && Number.isFinite(m.duration)) c.push({kind: "tracked", label: `${m.duration}m`});
 	if (m.totalMinutesTracked != null && m.totalMinutesTracked > 0) {
-		c.push(formatTracked(m.totalMinutesTracked));
+		c.push({kind: "tracked", label: formatTracked(m.totalMinutesTracked)});
 	}
 	return c;
 }

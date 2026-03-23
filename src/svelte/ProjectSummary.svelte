@@ -74,13 +74,13 @@
 		}
 	}
 
-	function noteChipsNext(n: AtomicNoteRow): string[] {
-		const c: string[] = ["#note"];
-		if (n.dateDisplay) c.push(n.dateDisplay);
-		if (n.noteType) c.push(n.noteType);
-		for (const t of n.tags) c.push(`#${t}`);
-		if (n.trackedMinutes > 0) c.push(formatTrackedMinutesShort(n.trackedMinutes));
-		if (n.priority) c.push(n.priority);
+	function noteChipsNext(n: AtomicNoteRow): import("../fulcrum/utils/projectActivity").ActivityChip[] {
+		const c: import("../fulcrum/utils/projectActivity").ActivityChip[] = [{kind: "tag", label: "#note"}];
+		if (n.dateDisplay) c.push({kind: "date", label: n.dateDisplay});
+		if (n.noteType) c.push({kind: "type", label: n.noteType.replace(/\[\[(?:[^\]|]+\|)?([^\]]+)\]\]/g, "$1")});
+		for (const t of n.tags) c.push({kind: "tag", label: `#${t}`});
+		if (n.trackedMinutes > 0) c.push({kind: "tracked", label: formatTrackedMinutesShort(n.trackedMinutes)});
+		if (n.priority) c.push({kind: "misc", label: n.priority});
 		return c;
 	}
 
@@ -411,9 +411,6 @@
 
 		<section class="fulcrum-section fulcrum-section--log">
 			<h2>Project log</h2>
-			<p class="fulcrum-muted">
-				Entries are appended to <code>{plugin.settings.projectLogSectionHeading}</code> on the project note (plain markdown, syncs everywhere).
-			</p>
 			<textarea
 				class="fulcrum-log-input"
 				rows="3"

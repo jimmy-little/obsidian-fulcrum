@@ -1,16 +1,15 @@
 <script lang="ts">
 	import type {WorkspaceLeaf} from "obsidian";
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
+	import type {ActivityChip} from "../fulcrum/utils/projectActivity";
 
 	export let title: string;
-	export let chips: string[] = [];
+	export let chips: ActivityChip[] = [];
 	export let kind: "note" | "task" | "log" | "meeting";
-	/** Invoked when the row is activated (click). */
 	export let whenClick: () => void;
 	export let plugin: FulcrumHost;
 	export let hoverParentLeaf: WorkspaceLeaf | undefined = undefined;
 	export let hoverPath: string | undefined = undefined;
-	/** Project Activity uses a left timeline rail; Next up rows stay plain. */
 	export let variant: "default" | "timeline" = "default";
 
 	function onHover(ev: MouseEvent): void {
@@ -112,7 +111,30 @@
 		{#if chips.length > 0}
 			<div class="fulcrum-activity-row__meta">
 				{#each chips as c}
-					<span class="fulcrum-activity-meta">{c}</span>
+					{#if c.kind === "date"}
+						<span class="fulcrum-activity-chip fulcrum-activity-chip--date">
+							<svg class="fulcrum-activity-chip__icon" viewBox="0 0 24 24" aria-hidden="true">
+								<rect x="3" y="4" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2" />
+								<path d="M16 2v4M8 2v4M3 10h18" fill="none" stroke="currentColor" stroke-width="2" />
+							</svg>
+							{c.label}
+						</span>
+					{:else if c.kind === "type"}
+						<span class="fulcrum-activity-chip fulcrum-activity-chip--type">{c.label}</span>
+					{:else if c.kind === "tag"}
+						<span class="fulcrum-activity-chip fulcrum-activity-chip--tag" data-tag-value={c.label.replace(/^#/, "")}>{c.label}</span>
+					{:else if c.kind === "tracked"}
+						<span class="fulcrum-activity-chip fulcrum-activity-chip--tracked">
+							<svg class="fulcrum-activity-chip__icon" viewBox="0 0 24 24" aria-hidden="true">
+								<path d="M5 3h14M6 3v3a7 7 0 0 0 6 6.92A7 7 0 0 0 18 6V3M6 21v-3a7 7 0 0 1 6-6.92A7 7 0 0 1 18 18v3M5 21h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+							</svg>
+							{c.label}
+						</span>
+					{:else if c.kind === "status"}
+						<span class="fulcrum-activity-chip fulcrum-activity-chip--status">{c.label}</span>
+					{:else}
+						<span class="fulcrum-activity-chip">{c.label}</span>
+					{/if}
 				{/each}
 			</div>
 		{/if}

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import type {FulcrumSettings} from "../fulcrum/settingsDefaults";
-	import {indexRevision} from "../fulcrum/stores";
+	import {indexRevision, settingsRevision} from "../fulcrum/stores";
 	import {parseList} from "../fulcrum/settingsDefaults";
 	import type {IndexedArea, IndexedProject} from "../fulcrum/types";
 	import {sortIndexedProjects} from "../fulcrum/utils/projectListSort";
@@ -18,12 +18,13 @@
 		snapshot = plugin.vaultIndex.getSnapshot();
 	}
 
-	$: doneProject = new Set(parseList(plugin.settings.projectDoneStatuses));
+	$: sRev = $settingsRevision;
+	$: doneProject = (void sRev, new Set(parseList(plugin.settings.projectDoneStatuses)));
 	$: activeProject = snapshot.projects.filter((p) => !doneProject.has(p.status));
-	$: groupBy = plugin.settings.dashboardActiveProjectsGroupBy;
-	$: sortBy = plugin.settings.projectSidebarSortBy;
-	$: sortDir = plugin.settings.projectSidebarSortDir;
-	$: statusOrder = parseList(plugin.settings.projectStatuses);
+	$: groupBy = (void sRev, plugin.settings.dashboardActiveProjectsGroupBy);
+	$: sortBy = (void sRev, plugin.settings.projectSidebarSortBy);
+	$: sortDir = (void sRev, plugin.settings.projectSidebarSortDir);
+	$: statusOrder = (void sRev, parseList(plugin.settings.projectStatuses));
 
 	type AreaGroup = {
 		kind: "area" | "unassigned" | "orphan";

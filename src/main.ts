@@ -20,6 +20,7 @@ import {openProjectSummaryLeaf, revealOrCreateDashboard} from "./fulcrum/openVie
 import {DEFAULT_SETTINGS, type FulcrumSettings} from "./fulcrum/settingsDefaults";
 import {postTaskNotesToggleStatus} from "./fulcrum/taskNotesApi";
 import {toggleInlineTaskLine, toggleTaskNoteFrontmatter} from "./fulcrum/taskVaultToggle";
+import {bumpSettingsRevision} from "./fulcrum/stores";
 import type {IndexedTask} from "./fulcrum/types";
 import {VaultIndex} from "./fulcrum/VaultIndex";
 import {FulcrumSettingTab} from "./settings";
@@ -219,6 +220,7 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 	async patchSettings(partial: Partial<FulcrumSettings>): Promise<void> {
 		Object.assign(this.settings, partial);
 		await this.saveData(this.settings);
+		bumpSettingsRevision();
 	}
 
 	openIndexedTask(task: IndexedTask): void {
