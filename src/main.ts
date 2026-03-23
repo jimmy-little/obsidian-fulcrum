@@ -6,6 +6,11 @@ import {
 	readFulcrumLogTail,
 	type ProjectLogActivityEntry,
 } from "./fulcrum/projectNote";
+import {
+	buildFullSnapshotBlock,
+	buildSnapshotMarkdown,
+	insertOrReplaceProjectSnapshot,
+} from "./fulcrum/projectArchive";
 import {FULCRUM_HOVER_SOURCE, VIEW_DASHBOARD, VIEW_PROJECT, VIEW_PROJECT_MANAGER} from "./fulcrum/constants";
 import {
 	ChangeProjectStatusModal,
@@ -417,6 +422,40 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 			this.settings.projectLogPreviewMaxLines,
 		);
 		return parseProjectLogLines(raw, f.stat.mtime);
+	}
+
+	async archiveProjectSnapshot(projectPath: string): Promise<void> {
+		const f = this.app.vault.getAbstractFileByPath(projectPath);
+		if (!(f instanceof TFile)) {
+			new Notice("Project file not found.");
+			return;
+		}
+		const proj = this.vaultIndex.resolveProjectByPath(projectPath);
+		if (!proj) {
+			new Notice("Project not found in index.");
+			return;
+		}
+		try {
+			const rollup = await this.vaultIndex.getProjectRollup(projectPath, this.settings);
+			if (!rollup) {
+				new Notice("Could not load project data for snapshot.");
+				return;
+			}
+			const logEntries = await this.loadProjectLogActivity(projectPath);
+			const body = buildSnapshotMarkdown(
+				this.app,
+				projectPath,
+				rollup,
+				logEntries,
+				this.settings,
+			);
+			const fullBlock = buildFullSnapshotBlock(body);
+			await insertOrReplaceProjectSnapshot(this.app, f, fullBlock);
+			new Notice("Project snapshot saved.");
+		} catch (e) {
+			console.error(e);
+			new Notice("Could not save project snapshot.");
+		}
 	}
 
 	openNewInlineTaskForProject(projectPath: string): void {

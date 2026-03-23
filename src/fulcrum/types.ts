@@ -76,6 +76,12 @@ export interface AtomicNoteRow {
 	modifiedMs: number;
 }
 
+export interface IndexedPerson {
+	file: TFile;
+	name: string;
+	avatarSrc: string | null;
+}
+
 export interface ProjectPageMeta {
 	launchDate?: string;
 	lastReviewed?: string;
@@ -106,6 +112,8 @@ export interface ProjectRollup {
 	accentColorCss: string;
 	hasBannerImage: boolean;
 	hasProjectColor: boolean;
+	/** Related people: from project frontmatter + related notes/tasks (when people folder set). */
+	relatedPeople: IndexedPerson[];
 }
 
 export interface IndexSnapshot {

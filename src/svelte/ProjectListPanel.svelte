@@ -58,17 +58,22 @@
 		return out;
 	})();
 
-	// Indexed area options: all areas from snapshot + None for unassigned
+	// Indexed area options: snapshot.areas + areas linked from projects (covers area files without type=area)
 	$: areaOptions = ((): { key: string; label: string }[] => {
-		const out: { key: string; label: string }[] = [];
+		const byPath = new Map<string, string>();
 		for (const a of snapshot.areas) {
-			out.push({ key: a.file.path, label: a.name });
+			byPath.set(a.file.path, a.name);
 		}
-		// Add None if any active project has no area
+		for (const p of activeProjectRaw) {
+			if (p.areaFile) {
+				const label = p.areaName?.trim() || p.areaFile.basename.replace(/\.md$/i, "") || p.areaFile.path;
+				if (!byPath.has(p.areaFile.path)) byPath.set(p.areaFile.path, label);
+			}
+		}
+		const out: { key: string; label: string }[] = [];
+		for (const [path, name] of byPath) out.push({ key: path, label: name });
 		const hasNone = activeProjectRaw.some((p) => !p.areaFile);
-		if (hasNone || out.length === 0) {
-			out.push({ key: NONE_KEY, label: "None" });
-		}
+		if (hasNone || out.length === 0) out.push({ key: NONE_KEY, label: "None" });
 		out.sort((a, b) => (a.key === NONE_KEY ? 1 : b.key === NONE_KEY ? -1 : a.label.localeCompare(b.label)));
 		return out;
 	})();

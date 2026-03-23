@@ -94,6 +94,13 @@ export interface FulcrumSettings {
 
 	projectBannerField: string;
 	projectColorField: string;
+
+	/** Project frontmatter field for related people wikilinks (e.g. relatedPeople). */
+	projectRelatedPeopleField: string;
+	/** People directory: when set, collect people from related notes/tasks; when empty, only project frontmatter. */
+	peopleFolder: string;
+	/** Frontmatter field on people notes for avatar image (when people directory is set). */
+	peopleAvatarField: string;
 }
 
 export const DEFAULT_SETTINGS: FulcrumSettings = {
@@ -174,6 +181,10 @@ export const DEFAULT_SETTINGS: FulcrumSettings = {
 
 	projectBannerField: "banner",
 	projectColorField: "color",
+
+	projectRelatedPeopleField: "relatedPeople",
+	peopleFolder: "",
+	peopleAvatarField: "avatar",
 };
 
 export function parseList(s: string): string[] {

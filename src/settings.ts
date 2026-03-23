@@ -194,6 +194,35 @@ export class FulcrumSettingTab extends PluginSettingTab {
 		this.textSetting("projectJiraField", "External link field (e.g. Jira)");
 		this.textSetting("projectBannerField", "Banner image field");
 		this.textSetting("projectColorField", "Project color field");
+		this.textSetting("projectRelatedPeopleField", "Related people field");
+		new Setting(containerEl)
+			.setName("People folder")
+			.setDesc(
+				"When set, people linked from related notes and tasks are included. Leave empty to only show people from project frontmatter.",
+			)
+			.addText((t) =>
+				t
+					.setPlaceholder("e.g. 10 People")
+					.setValue(this.plugin.settings.peopleFolder)
+					.onChange(async (v) => {
+						this.plugin.settings.peopleFolder = v;
+						await this.plugin.saveSettings();
+						this.plugin.vaultIndex.scheduleRebuild();
+					}),
+			);
+		new Setting(containerEl)
+			.setName("People avatar field")
+			.setDesc("Frontmatter key on people notes for avatar image. Used when people folder is set.")
+			.addText((t) =>
+				t
+					.setPlaceholder("avatar")
+					.setValue(this.plugin.settings.peopleAvatarField)
+					.onChange(async (v) => {
+						this.plugin.settings.peopleAvatarField = v;
+						await this.plugin.saveSettings();
+						this.plugin.vaultIndex.scheduleRebuild();
+					}),
+			);
 		this.textSetting("projectRankField", "Project rank field (number; higher = more important)");
 		new Setting(containerEl)
 			.setName("Default review frequency (days)")

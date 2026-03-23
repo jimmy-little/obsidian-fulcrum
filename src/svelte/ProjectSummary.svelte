@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type {WorkspaceLeaf} from "obsidian";
+	import {setIcon} from "obsidian";
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import {indexRevision} from "../fulcrum/stores";
 	import {parseList} from "../fulcrum/settingsDefaults";
@@ -48,6 +49,7 @@
 	let logEntries: ProjectLogActivityEntry[] = [];
 	let logDraft = "";
 	let logBusy = false;
+	let snapshotBtnEl: HTMLButtonElement | null = null;
 
 	async function loadLogActivity(): Promise<void> {
 		logEntries = await plugin.loadProjectLogActivity(projectPath);
@@ -102,6 +104,12 @@
 			logBusy = false;
 		}
 	}
+
+	async function captureSnapshot(): Promise<void> {
+		await plugin.archiveProjectSnapshot(projectPath);
+	}
+
+	$: if (snapshotBtnEl) setIcon(snapshotBtnEl, "camera");
 
 	function markReviewed(): void {
 		plugin.openMarkReviewedModal(projectPath, () => void loadLogActivity());
@@ -199,7 +207,7 @@
 			{/if}
 			<div
 				class="fulcrum-project-banner__inner"
-				class:fulcrum-project-banner__inner--has-foot={Boolean(statusPillText || ticketUrl)}
+				class:fulcrum-project-banner__inner--has-foot={true}
 				class:fulcrum-project-banner__inner--on-dark={bannerLightFg}
 				class:fulcrum-project-banner__inner--on-light={!bannerLightFg}
 			>
@@ -235,8 +243,8 @@
 						</div>
 					</div>
 				</div>
-				{#if statusPillText || ticketUrl}
-					<div class="fulcrum-project-banner__foot">
+				<div class="fulcrum-project-banner__foot">
+					<div class="fulcrum-project-banner__foot-left">
 						{#if statusPillText}
 							<button
 								type="button"
@@ -267,7 +275,14 @@
 							</a>
 						{/if}
 					</div>
-				{/if}
+					<button
+						type="button"
+						class="fulcrum-banner-btn fulcrum-snapshot-btn"
+						title="Capture snapshot"
+						bind:this={snapshotBtnEl}
+						on:click={() => void captureSnapshot()}
+					></button>
+				</div>
 			</div>
 		</div>
 
@@ -423,16 +438,44 @@
 			{/if}
 		</section>
 
+		{#if rollup.relatedPeople?.length > 0}
+			<section class="fulcrum-section fulcrum-section--people">
+				<h2 class="fulcrum-section--people__title">Related people</h2>
+				<div class="fulcrum-people-grid">
+					{#each rollup.relatedPeople as person (person.file.path)}
+						<button
+							type="button"
+							class="fulcrum-person-card"
+							aria-label={person.name}
+							on:click={() => openPath(person.file.path)}
+						>
+							<div class="fulcrum-person-card__avatar">
+								{#if person.avatarSrc}
+									<img src={person.avatarSrc} alt="" />
+								{:else}
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+										<circle cx="12" cy="8" r="3"/>
+										<path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
+									</svg>
+								{/if}
+							</div>
+							<span class="fulcrum-person-card__name">{person.name}</span>
+						</button>
+					{/each}
+				</div>
+			</section>
+		{/if}
+
 		<section class="fulcrum-section fulcrum-section--log">
 			<h2>Project log</h2>
-			<textarea
-				class="fulcrum-log-input"
-				rows="3"
-				placeholder="Quick note for the project page…"
-				bind:value={logDraft}
-				disabled={logBusy}
-			/>
-			<div class="fulcrum-log-actions">
+			<div class="fulcrum-log-row">
+				<textarea
+					class="fulcrum-log-input"
+					rows="3"
+					placeholder="Quick note for the project page…"
+					bind:value={logDraft}
+					disabled={logBusy}
+				/>
 				<button
 					type="button"
 					class="mod-cta fulcrum-cta-accent"

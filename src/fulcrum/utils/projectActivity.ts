@@ -68,7 +68,7 @@ function chipsForMeeting(m: IndexedMeeting, formatTracked: (n: number) => string
 	return c;
 }
 
-function sortMsForMeeting(m: IndexedMeeting): number {
+export function sortMsForMeeting(m: IndexedMeeting): number {
 	if (m.date?.trim()) {
 		const t = Date.parse(m.date.slice(0, 10) + "T12:00:00");
 		if (!Number.isNaN(t)) return t;

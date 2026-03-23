@@ -31,6 +31,8 @@ export interface FulcrumHost {
 	): void;
 	loadProjectLogPreview(projectPath: string): Promise<string[]>;
 	loadProjectLogActivity(projectPath: string): Promise<ProjectLogActivityEntry[]>;
+	/** Capture project stats, tasks, meetings, and activity as static markdown in the project note. */
+	archiveProjectSnapshot(projectPath: string): Promise<void>;
 	/** Append `- [ ] title #tag [[project]]` to the project note (Obsidian Tasks / inline source). */
 	openNewInlineTaskForProject(projectPath: string): void;
 	/** TaskNotes “Create new task” with project pre-filled when the plugin exposes it. */

@@ -36,7 +36,6 @@
 	}
 
 	let leftCollapsed = false;
-	let rightCollapsed = true;
 	let pmEl: HTMLDivElement | null = null;
 	let leftWidthPx: number | null = readStoredLeftWidth();
 	let dashboardBtnEl: HTMLButtonElement | null = null;
@@ -54,10 +53,7 @@
 	function maxLeftColWidth(): number {
 		if (!pmEl) return 720;
 		const pmW = pmEl.getBoundingClientRect().width;
-		const rightEl = pmEl.querySelector(".fulcrum-pm__sidebar--right");
-		const rw =
-			rightEl instanceof HTMLElement ? rightEl.getBoundingClientRect().width : 200;
-		return Math.max(PM_LEFT_MIN, pmW - rw - PM_SPLIT_PX - PM_MAIN_MIN);
+		return Math.max(PM_LEFT_MIN, pmW - PM_SPLIT_PX - PM_MAIN_MIN);
 	}
 
 	function clampLeftWidth(w: number): number {
@@ -119,7 +115,6 @@
 	bind:this={pmEl}
 	class="fulcrum-pm"
 	class:fulcrum-pm-left-collapsed={leftCollapsed}
-	class:fulcrum-pm-right-collapsed={rightCollapsed}
 	style={!leftCollapsed && leftWidthPx != null
 		? `--fulcrum-pm-left-w: ${leftWidthPx}px`
 		: undefined}
@@ -225,20 +220,4 @@
 			<p class="fulcrum-muted">Pick a project from the list.</p>
 		{/if}
 	</main>
-
-	<aside class="fulcrum-pm__sidebar fulcrum-pm__sidebar--right">
-		<div class="fulcrum-pm__right-inner">
-			<div class="fulcrum-pm__right-scroll">
-				<p class="fulcrum-muted fulcrum-pm__right-placeholder">Sidebar reserved for future panels.</p>
-			</div>
-			<button
-				type="button"
-				class="fulcrum-pm__sidebar-edge-btn fulcrum-pm__sidebar-edge-btn--right"
-				aria-label={rightCollapsed ? "Expand right sidebar" : "Collapse right sidebar"}
-				on:click={() => (rightCollapsed = !rightCollapsed)}
-			>
-				{rightCollapsed ? "⟨" : "⟩"}
-			</button>
-		</div>
-	</aside>
 </div>

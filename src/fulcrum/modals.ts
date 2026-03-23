@@ -540,6 +540,7 @@ export class MarkProjectCompleteModal extends Modal {
 			return;
 		}
 		try {
+			await this.host.archiveProjectSnapshot(this.projectPath);
 			await markProjectCompleteAndMove(this.app, f, this.host.settings, {note: this.note});
 			await this.host.vaultIndex.rebuild();
 			await this.host.openDashboard();

@@ -15,7 +15,11 @@ import {isUnderFolder, projectStatusFromSubfolderLayout} from "./utils/paths";
 import {formatShortMonthDay, isOverdue} from "./utils/dates";
 import {parseWikiLink} from "./utils/wikilinks";
 import {parseFolderPrefixList, isUnderAtomicPrefixes} from "./utils/atomicFolders";
-import {fileLinksToProject, firstLinkedProjectFileInLine} from "./utils/projectLink";
+import {
+	fileLinksToProject,
+	firstLinkedProjectFileInLine,
+	resolveProjectFileFromFm,
+} from "./utils/projectLink";
 import {readTrackedMinutesFromFm} from "./utils/trackedMinutes";
 import {resolveBannerImageSrc, resolveProjectAccentCss} from "./utils/projectVisual";
 import {bumpIndexRevision} from "./stores";
@@ -30,6 +34,7 @@ import {
 	resolveEntryTitle,
 	resolveNoteType,
 } from "./utils/notePreview";
+import {collectRelatedPeople} from "./projectPeople";
 
 function fmString(fm: Record<string, unknown> | undefined, key: string): string | undefined {
 	if (!fm) return undefined;
@@ -275,11 +280,13 @@ export class VaultIndex {
 				const tVal = fmString(fm, typeField)?.toLowerCase();
 				if (!tagsIncludeTask(fm, s.taskTag) && tVal !== "task") continue;
 
-				const pl = parseWikiLink(fm[s.projectLinkField]);
+				const projectFile = resolveProjectFileFromFm(
+					this.app,
+					fm,
+					file.path,
+					s.projectLinkField,
+				);
 				const al = parseWikiLink(fm[s.areaLinkField]);
-				const projectFile = pl
-					? this.app.metadataCache.getFirstLinkpathDest(pl, file.path)
-					: null;
 				const areaFile = al
 					? this.app.metadataCache.getFirstLinkpathDest(al, file.path)
 					: null;
@@ -532,6 +539,15 @@ export class VaultIndex {
 		const accentColorCss = resolveProjectAccentCss(
 			hasProjectColor ? project.color : undefined,
 		);
+		const relatedPeople = await collectRelatedPeople(
+			this.app,
+			projectPath,
+			project.file,
+			projectTasks,
+			meetings,
+			atomicRows,
+			s,
+		);
 
 		return {
 			project,
@@ -550,6 +566,7 @@ export class VaultIndex {
 			accentColorCss,
 			hasBannerImage: bannerImageSrc != null,
 			hasProjectColor,
+			relatedPeople,
 		};
 	}
 

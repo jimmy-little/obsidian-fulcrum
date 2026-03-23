@@ -17,7 +17,21 @@ function destForRawLink(app: App, raw: unknown, sourcePath: string): TFile | nul
 	return null;
 }
 
-/** Whether this file’s `project` (or configured) field resolves to the project file. */
+/** Resolve project TFile from task frontmatter. Handles project (single) and projects (TaskNotes array). */
+export function resolveProjectFileFromFm(
+	app: App,
+	fm: Record<string, unknown> | undefined,
+	sourcePath: string,
+	linkField: string,
+): TFile | null {
+	if (!fm) return null;
+	const dest = destForRawLink(app, fm[linkField], sourcePath);
+	if (dest) return dest;
+	if (linkField !== "projects") return destForRawLink(app, fm["projects"], sourcePath);
+	return null;
+}
+
+/** Whether this file's `project` (or configured) field resolves to the project file. */
 export function fileLinksToProject(
 	app: App,
 	file: TFile,
