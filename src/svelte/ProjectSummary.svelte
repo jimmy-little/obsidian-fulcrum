@@ -351,9 +351,11 @@
 									task={item.task}
 									done={false}
 									showProjectLink={false}
+									showTimelineIcon={true}
 								/>
 							{:else if item.kind === "note" && item.note}
 								<ActivityRow
+									variant="icon"
 									title={item.note.entryTitle}
 									chips={noteChipsNext(item.note)}
 									kind="note"

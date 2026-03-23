@@ -332,6 +332,21 @@ export class FulcrumSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+		new Setting(containerEl)
+			.setName("Hover preview delay (ms)")
+			.setDesc(
+				"Delay before showing the page preview on hover over activity rows and linked items. 0 = instant. 1500–2000 ms reduces accidental pop-ups.",
+			)
+			.addSlider((sl) =>
+				sl
+					.setLimits(0, 3000, 250)
+					.setValue(this.plugin.settings.hoverPreviewDelayMs)
+					.setDynamicTooltip()
+					.onChange(async (v) => {
+						this.plugin.settings.hoverPreviewDelayMs = v;
+						await this.plugin.saveSettings();
+					}),
+			);
 		this.toggleSetting("showRibbonIcon", "Show dashboard ribbon icon");
 		this.textSetting("dateDisplayFormat", "Date display format (reserved)");
 		new Setting(containerEl)

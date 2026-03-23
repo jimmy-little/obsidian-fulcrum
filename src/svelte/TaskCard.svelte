@@ -15,6 +15,7 @@
 	export let task: IndexedTask;
 	export let done: boolean;
 	export let showProjectLink = false;
+	export let showTimelineIcon = false;
 
 	let toggling = false;
 	const canToggle = Platform.isDesktop;
@@ -89,7 +90,25 @@
 	}
 </script>
 
-<div class={rowClass} data-priority={band || undefined}>
+<div class={rowClass} class:fulcrum-task-card--with-timeline-icon={showTimelineIcon} data-priority={band || undefined}>
+	{#if showTimelineIcon}
+		<div class="fulcrum-activity-timeline__track fulcrum-activity-timeline__track--icon-only" aria-hidden="true">
+			<div class="fulcrum-activity-timeline__stem fulcrum-activity-timeline__stem--before"></div>
+			<div class="fulcrum-activity-timeline__node">
+				<svg class="fulcrum-activity-timeline__icon" viewBox="0 0 24 24" aria-hidden="true">
+					<path
+						d="M20 6 9 17l-5-5"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.25"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+				</svg>
+			</div>
+			<div class="fulcrum-activity-timeline__stem fulcrum-activity-timeline__stem--after"></div>
+		</div>
+	{/if}
 	<div class="fulcrum-task-card__main-row">
 		<div
 			role="checkbox"

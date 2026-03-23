@@ -10,16 +10,38 @@
 	export let plugin: FulcrumHost;
 	export let hoverParentLeaf: WorkspaceLeaf | undefined = undefined;
 	export let hoverPath: string | undefined = undefined;
-	export let variant: "default" | "timeline" = "default";
+	export let variant: "default" | "timeline" | "icon" = "default";
+
+	let hoverTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	function onHover(ev: MouseEvent): void {
 		if (!hoverPath || !hoverParentLeaf) return;
-		plugin.triggerFulcrumHoverLink(
-			ev,
-			hoverParentLeaf,
-			ev.currentTarget as HTMLElement,
-			hoverPath,
-		);
+		const delay = plugin.settings.hoverPreviewDelayMs ?? 0;
+		if (delay <= 0) {
+			plugin.triggerFulcrumHoverLink(
+				ev,
+				hoverParentLeaf,
+				ev.currentTarget as HTMLElement,
+				hoverPath,
+			);
+			return;
+		}
+		hoverTimeout = window.setTimeout(() => {
+			hoverTimeout = null;
+			plugin.triggerFulcrumHoverLink(
+				ev,
+				hoverParentLeaf,
+				ev.currentTarget as HTMLElement,
+				hoverPath,
+			);
+		}, delay);
+	}
+
+	function onHoverCancel(): void {
+		if (hoverTimeout) {
+			clearTimeout(hoverTimeout);
+			hoverTimeout = null;
+		}
 	}
 
 	function onRowKeydown(ev: KeyboardEvent): void {
@@ -34,13 +56,19 @@
 	tabindex="0"
 	class="fulcrum-activity-row"
 	class:fulcrum-activity-row--timeline={variant === "timeline"}
+	class:fulcrum-activity-row--icon={variant === "icon"}
 	data-fulcrum-activity-kind={kind}
 	on:click={whenClick}
 	on:keydown={onRowKeydown}
 	on:mouseenter={onHover}
+	on:mouseleave={onHoverCancel}
 >
-	{#if variant === "timeline"}
-		<div class="fulcrum-activity-timeline__track" aria-hidden="true">
+	{#if variant === "timeline" || variant === "icon"}
+		<div
+			class="fulcrum-activity-timeline__track"
+			class:fulcrum-activity-timeline__track--icon-only={variant === "icon"}
+			aria-hidden="true"
+		>
 			<div class="fulcrum-activity-timeline__stem fulcrum-activity-timeline__stem--before"></div>
 			<div class="fulcrum-activity-timeline__node">
 				{#if kind === "task"}

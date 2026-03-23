@@ -101,6 +101,9 @@ export interface FulcrumSettings {
 	peopleFolder: string;
 	/** Frontmatter field on people notes for avatar image (when people directory is set). */
 	peopleAvatarField: string;
+
+	/** Delay in ms before showing page preview on hover (0 = instant). */
+	hoverPreviewDelayMs: number;
 }
 
 export const DEFAULT_SETTINGS: FulcrumSettings = {
@@ -185,6 +188,8 @@ export const DEFAULT_SETTINGS: FulcrumSettings = {
 	projectRelatedPeopleField: "relatedPeople",
 	peopleFolder: "",
 	peopleAvatarField: "avatar",
+
+	hoverPreviewDelayMs: 1500,
 };
 
 export function parseList(s: string): string[] {

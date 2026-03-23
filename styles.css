@@ -439,6 +439,18 @@ If your plugin does not need CSS, delete this file.
 	box-sizing: border-box;
 }
 
+.fulcrum-activity-timeline__track--icon-only .fulcrum-activity-timeline__stem {
+	display: none;
+}
+
+.fulcrum-activity-row--icon {
+	display: grid;
+	grid-template-columns: 2.65rem minmax(0, 1fr);
+	gap: 0 0.55rem;
+	align-items: stretch;
+	padding: 0 0.35rem 0 0.1rem;
+}
+
 .fulcrum-activity-timeline__stem {
 	flex: 1 1 0;
 	width: 2px;
@@ -477,7 +489,8 @@ If your plugin does not need CSS, delete this file.
 	height: 0.92rem;
 }
 
-.fulcrum-activity-row--timeline:hover .fulcrum-activity-timeline__node {
+.fulcrum-activity-row--timeline:hover .fulcrum-activity-timeline__node,
+.fulcrum-activity-row--icon:hover .fulcrum-activity-timeline__node {
 	border-color: color-mix(in srgb, var(--interactive-accent) 35%, var(--background-modifier-border));
 	color: var(--text-accent);
 }
@@ -612,7 +625,8 @@ If your plugin does not need CSS, delete this file.
 	background: var(--fulcrum-accent, var(--background-modifier-border));
 }
 
-.fulcrum-project .fulcrum-activity-row--timeline:hover .fulcrum-activity-timeline__node {
+.fulcrum-project .fulcrum-activity-row--timeline:hover .fulcrum-activity-timeline__node,
+.fulcrum-project .fulcrum-activity-row--icon:hover .fulcrum-activity-timeline__node {
 	border-color: var(--fulcrum-accent);
 	color: var(--fulcrum-accent);
 }
@@ -1826,6 +1840,28 @@ button.fulcrum-task-card__note-type:focus-visible {
 
 .fulcrum-task-card--priority-low {
 	--fulcrum-task-border: #5dade2;
+}
+
+.fulcrum-task-card--with-timeline-icon {
+	display: grid;
+	grid-template-columns: 2.65rem minmax(0, 1fr);
+	gap: 0 0.55rem;
+	align-items: stretch;
+}
+
+.fulcrum-task-card--with-timeline-icon .fulcrum-task-card__main-row {
+	flex: 1;
+	min-width: 0;
+}
+
+.fulcrum-next-up-list .fulcrum-task-card--with-timeline-icon:hover .fulcrum-activity-timeline__node {
+	border-color: color-mix(in srgb, var(--interactive-accent) 35%, var(--background-modifier-border));
+	color: var(--text-accent);
+}
+
+.fulcrum-project .fulcrum-next-up-list .fulcrum-task-card--with-timeline-icon:hover .fulcrum-activity-timeline__node {
+	border-color: var(--fulcrum-accent);
+	color: var(--fulcrum-accent);
 }
 
 .fulcrum-task-card__main-row {
