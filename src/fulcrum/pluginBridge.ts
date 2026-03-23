@@ -23,6 +23,12 @@ export interface FulcrumHost {
 		projectPath: string,
 		onComplete?: () => void | Promise<void>,
 	): void;
+	/** Change project status: pick status, confirm with Set Frontmatter / Update Folder toggles. */
+	openChangeProjectStatusModal(
+		projectPath: string,
+		currentStatus: string,
+		onComplete?: (newPath?: string) => void | Promise<void>,
+	): void;
 	loadProjectLogPreview(projectPath: string): Promise<string[]>;
 	loadProjectLogActivity(projectPath: string): Promise<ProjectLogActivityEntry[]>;
 	/** Append `- [ ] title #tag [[project]]` to the project note (Obsidian Tasks / inline source). */

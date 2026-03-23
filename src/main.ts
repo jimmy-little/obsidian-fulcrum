@@ -8,6 +8,7 @@ import {
 } from "./fulcrum/projectNote";
 import {FULCRUM_HOVER_SOURCE, VIEW_DASHBOARD, VIEW_PROJECT, VIEW_PROJECT_MANAGER} from "./fulcrum/constants";
 import {
+	ChangeProjectStatusModal,
 	LinkMeetingModal,
 	MarkProjectCompleteModal,
 	MarkReviewedModal,
@@ -209,6 +210,41 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 		if (typeof merged.projectRankField !== "string") {
 			merged.projectRankField = DEFAULT_SETTINGS.projectRankField;
 		}
+		if (
+			merged.kanbanColumnBy !== "status" &&
+			merged.kanbanColumnBy !== "area"
+		) {
+			merged.kanbanColumnBy = DEFAULT_SETTINGS.kanbanColumnBy;
+		}
+		if (!Array.isArray(merged.kanbanHiddenStatus)) {
+			merged.kanbanHiddenStatus = DEFAULT_SETTINGS.kanbanHiddenStatus;
+		}
+		if (!Array.isArray(merged.kanbanHiddenArea)) {
+			merged.kanbanHiddenArea = DEFAULT_SETTINGS.kanbanHiddenArea;
+		}
+		if (!Array.isArray(merged.kanbanOrderStatus)) {
+			merged.kanbanOrderStatus = DEFAULT_SETTINGS.kanbanOrderStatus;
+		}
+		if (!Array.isArray(merged.kanbanOrderArea)) {
+			merged.kanbanOrderArea = DEFAULT_SETTINGS.kanbanOrderArea;
+		}
+		if (!Array.isArray(merged.projectSidebarFilterUncheckedStatus)) {
+			merged.projectSidebarFilterUncheckedStatus =
+				DEFAULT_SETTINGS.projectSidebarFilterUncheckedStatus;
+		}
+		if (!Array.isArray(merged.projectSidebarFilterUncheckedArea)) {
+			merged.projectSidebarFilterUncheckedArea =
+				DEFAULT_SETTINGS.projectSidebarFilterUncheckedArea;
+		}
+		if (
+			merged.calendarViewMode !== "month" &&
+			merged.calendarViewMode !== "workWeek" &&
+			merged.calendarViewMode !== "week" &&
+			merged.calendarViewMode !== "threeDay" &&
+			merged.calendarViewMode !== "day"
+		) {
+			merged.calendarViewMode = DEFAULT_SETTINGS.calendarViewMode;
+		}
 
 		this.settings = merged as FulcrumSettings;
 	}
@@ -344,6 +380,20 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 		onComplete?: () => void | Promise<void>,
 	): void {
 		new MarkProjectCompleteModal(this.app, this, projectPath, onComplete).open();
+	}
+
+	openChangeProjectStatusModal(
+		projectPath: string,
+		currentStatus: string,
+		onComplete?: (newPath?: string) => void | Promise<void>,
+	): void {
+		new ChangeProjectStatusModal(
+			this.app,
+			this,
+			projectPath,
+			currentStatus,
+			onComplete,
+		).open();
 	}
 
 	async loadProjectLogPreview(projectPath: string): Promise<string[]> {

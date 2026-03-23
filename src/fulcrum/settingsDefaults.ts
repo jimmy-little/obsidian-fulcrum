@@ -50,12 +50,26 @@ export interface FulcrumSettings {
 
 	defaultProjectView: "summary" | "board";
 	openViewsIn: "main" | "sidebar";
+	/** Kanban column grouping */
+	kanbanColumnBy: "status" | "area";
+	/** Kanban hidden column IDs (per grouping mode) */
+	kanbanHiddenStatus: string[];
+	kanbanHiddenArea: string[];
+	/** Kanban column order (IDs). Empty = natural order. */
+	kanbanOrderStatus: string[];
+	kanbanOrderArea: string[];
+	/** Calendar view mode */
+	calendarViewMode: "month" | "workWeek" | "week" | "threeDay" | "day";
 	showRibbonIcon: boolean;
 	dateDisplayFormat: string;
 	completionThresholdPercent: number;
 	dashboardActiveProjectsGroupBy: "area" | "status";
 	projectSidebarSortBy: ProjectSidebarSortBy;
 	projectSidebarSortDir: ProjectSidebarSortDir;
+	/** Project sidebar filter: unchecked status keys (empty = all checked). Use __none__ for no status. */
+	projectSidebarFilterUncheckedStatus: string[];
+	/** Project sidebar filter: unchecked area keys (empty = all checked). Use __none__ for no area. */
+	projectSidebarFilterUncheckedArea: string[];
 
 	projectStatusIndication: ProjectStatusIndication;
 	projectStatusField: string;
@@ -127,12 +141,20 @@ export const DEFAULT_SETTINGS: FulcrumSettings = {
 
 	defaultProjectView: "summary",
 	openViewsIn: "main",
+	kanbanColumnBy: "status",
+	kanbanHiddenStatus: [],
+	kanbanHiddenArea: [],
+	kanbanOrderStatus: [],
+	kanbanOrderArea: [],
+	calendarViewMode: "week",
 	showRibbonIcon: true,
 	dateDisplayFormat: "YYYY-MM-DD",
 	completionThresholdPercent: 100,
 	dashboardActiveProjectsGroupBy: "area",
 	projectSidebarSortBy: "launch",
 	projectSidebarSortDir: "asc",
+	projectSidebarFilterUncheckedStatus: [],
+	projectSidebarFilterUncheckedArea: [],
 
 	projectStatusIndication: "frontmatter",
 	projectStatusField: "status",

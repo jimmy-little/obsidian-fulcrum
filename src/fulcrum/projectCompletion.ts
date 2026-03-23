@@ -69,3 +69,42 @@ export async function markProjectCompleteAndMove(
 	await app.fileManager.renameFile(projectFile, newPath);
 	return newPath;
 }
+
+/** Move project file to the folder for the given status (subfolder layout). */
+export async function moveProjectToStatusFolder(
+	app: App,
+	projectFile: TFile,
+	s: FulcrumSettings,
+	newStatus: string,
+): Promise<string> {
+	const root = normalizePath(s.areasProjectsFolder.trim());
+	if (!root) throw new Error("Areas & projects folder is not set.");
+
+	const path = projectFile.path;
+	if (!path.startsWith(root + "/")) {
+		throw new Error("Project is not under the areas & projects folder.");
+	}
+
+	const rel = path.slice(root.length + 1);
+	const parts = rel.split("/").filter(Boolean);
+	const statusFolder = newStatus.trim() || "active";
+
+	let destDir: string;
+	if (parts.length >= 2) {
+		const restWithoutFile = parts.slice(1, -1);
+		destDir = [root, statusFolder, ...restWithoutFile].filter(Boolean).join("/");
+	} else if (parts.length === 1) {
+		destDir = `${root}/${statusFolder}`;
+	} else {
+		throw new Error("Invalid project path.");
+	}
+
+	destDir = normalizePath(destDir);
+	await ensureFolderPath(app.vault, destDir);
+
+	const newPath = uniqueFilePathInDir(app.vault, destDir, projectFile.name);
+	if (normalizePath(path) === normalizePath(newPath)) return path;
+
+	await app.fileManager.renameFile(projectFile, newPath);
+	return newPath;
+}

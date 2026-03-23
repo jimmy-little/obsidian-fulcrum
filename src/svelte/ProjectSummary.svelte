@@ -238,9 +238,23 @@
 				{#if statusPillText || ticketUrl}
 					<div class="fulcrum-project-banner__foot">
 						{#if statusPillText}
-							<span
-								class="fulcrum-status-pill fulcrum-status-pill--banner fulcrum-status-pill--jira"
-								data-fulcrum-status={statusKind}>{statusPillText}</span>
+							<button
+								type="button"
+								class="fulcrum-status-pill fulcrum-status-pill--banner fulcrum-status-pill--jira fulcrum-status-pill--clickable"
+								data-fulcrum-status={statusKind}
+								title="Change status"
+								on:click={() => {
+									plugin.openChangeProjectStatusModal(
+										projectPath,
+										rollup.project.status,
+										(newPath) => {
+											if (newPath) void plugin.openProjectSummary(newPath);
+										},
+									);
+								}}
+							>
+								{statusPillText}
+							</button>
 						{/if}
 						{#if ticketUrl}
 							<a

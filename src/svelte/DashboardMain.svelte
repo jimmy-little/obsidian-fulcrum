@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
+	import type {IndexedMeeting} from "../fulcrum/types";
 	import {indexRevision} from "../fulcrum/stores";
 	import {parseList} from "../fulcrum/settingsDefaults";
 	import {
@@ -9,6 +10,7 @@
 		isDateInUpcomingDays,
 		dayStartMs,
 	} from "../fulcrum/utils/dates";
+	import {addDays, toISODate, formatDayShort} from "../fulcrum/utils/calendarGrid";
 	import TaskCard from "./TaskCard.svelte";
 
 	export let plugin: FulcrumHost;
@@ -21,7 +23,6 @@
 	}
 
 	$: doneTask = new Set(parseList(plugin.settings.taskDoneStatuses));
-	$: doneProject = new Set(parseList(plugin.settings.projectDoneStatuses));
 
 	$: tasksDueToday = snapshot.tasks.filter(
 		(t) => !doneTask.has(t.status) && isDueToday(t.dueDate, false),
@@ -40,21 +41,41 @@
 		return c >= weekAgo;
 	});
 
-	$: areaRows = snapshot.areas.map((a) => {
-		const count = snapshot.projects.filter(
-			(p) => p.areaFile?.path === a.file.path && !doneProject.has(p.status),
-		).length;
-		return {area: a, activeCount: count};
-	});
+	/** 7 days starting today for the meetings calendar grid */
+	$: meetingGridDays = (() => {
+		const out: {iso: string; dayLabel: string; dayNum: string}[] = [];
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+		for (let i = 0; i < 7; i++) {
+			const d = addDays(today, i);
+			out.push({
+				iso: toISODate(d),
+				dayLabel: formatDayShort(d),
+				dayNum: String(d.getDate()),
+			});
+		}
+		return out;
+	})();
+
+	$: meetingsByDate = ((): Map<string, IndexedMeeting[]> => {
+		const m = new Map<string, IndexedMeeting[]>();
+		for (const mt of snapshot.meetings) {
+			const key = mt.date?.slice(0, 10) ?? "";
+			if (!key) continue;
+			if (!isDateInUpcomingDays(mt.date, 7)) continue;
+			const cur = m.get(key) ?? [];
+			cur.push(mt);
+			m.set(key, cur);
+		}
+		for (const [, arr] of m) {
+			arr.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
+		}
+		return m;
+	})();
 
 	$: todayTasks = snapshot.tasks
 		.filter((t) => !doneTask.has(t.status) && isDueToday(t.dueDate, false))
 		.slice(0, 20);
-
-	$: upcomingMeetings = snapshot.meetings
-		.filter((m) => isDateInUpcomingDays(m.date, 7))
-		.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""))
-		.slice(0, 15);
 
 	function openFile(path: string): void {
 		const f = plugin.app.vault.getAbstractFileByPath(path);
@@ -66,43 +87,17 @@
 
 <section class="fulcrum-section">
 	<h2>Today</h2>
-	<div class="fulcrum-stat-grid">
-		<button type="button" class="fulcrum-stat-card">
-			<span class="fulcrum-stat-card__label">Tasks due</span>
-			<span class="fulcrum-stat-card__value">{tasksDueToday.length}</span>
-		</button>
-		<button type="button" class="fulcrum-stat-card">
-			<span class="fulcrum-stat-card__label">Overdue</span>
-			<span class="fulcrum-stat-card__value">{overdueTasks.length}</span>
-		</button>
-		<button type="button" class="fulcrum-stat-card">
-			<span class="fulcrum-stat-card__label">Meetings today</span>
-			<span class="fulcrum-stat-card__value">{meetingsToday.length}</span>
-		</button>
-		<button type="button" class="fulcrum-stat-card">
-			<span class="fulcrum-stat-card__label">Completed (7d)</span>
-			<span class="fulcrum-stat-card__value">{completedThisWeek.length}</span>
-		</button>
+	<div class="fulcrum-project-meta-strip">
+		<div class="fulcrum-project-meta-strip__row">
+			<span>Tasks due <span class="fulcrum-meta-days">{tasksDueToday.length}</span></span>
+			<span class="fulcrum-meta-sep">·</span>
+			<span>Overdue <span class="fulcrum-meta-days fulcrum-meta-days--since">{overdueTasks.length}</span></span>
+			<span class="fulcrum-meta-sep">·</span>
+			<span>Meetings today <span class="fulcrum-meta-days">{meetingsToday.length}</span></span>
+			<span class="fulcrum-meta-sep">·</span>
+			<span>Completed (7d) <span class="fulcrum-meta-days">{completedThisWeek.length}</span></span>
+		</div>
 	</div>
-</section>
-
-<section class="fulcrum-section">
-	<h2>Areas</h2>
-	{#if areaRows.length === 0}
-		<p class="fulcrum-muted">No area notes found. Add <code>type: area</code> under your projects folder.</p>
-	{:else}
-		<ul class="fulcrum-list">
-			{#each areaRows as {area, activeCount}}
-				<li>
-					<button type="button" class="fulcrum-linklike" on:click={() => openFile(area.file.path)}>
-						<span class="fulcrum-area-icon">{area.icon ?? "▸"}</span>
-						<span>{area.name}</span>
-						<span class="fulcrum-muted">({activeCount} active projects)</span>
-					</button>
-				</li>
-			{/each}
-		</ul>
-	{/if}
 </section>
 
 <section class="fulcrum-section">
@@ -122,18 +117,35 @@
 
 <section class="fulcrum-section">
 	<h2>Upcoming meetings (7 days)</h2>
-	{#if upcomingMeetings.length === 0}
-		<p class="fulcrum-muted">No meetings in range.</p>
-	{:else}
-		<ul class="fulcrum-list">
-			{#each upcomingMeetings as m}
-				<li>
-					<button type="button" class="fulcrum-linklike" on:click={() => openFile(m.file.path)}>
-						<span>{m.date?.slice(0, 10) ?? "—"}</span>
-						<span>{m.title}</span>
-					</button>
-				</li>
-			{/each}
-		</ul>
-	{/if}
+	<div class="fulcrum-dashboard-meetings-grid" role="grid" aria-label="Meetings by day" style="--fulcrum-meetings-cols: 7">
+		{#each meetingGridDays as {iso, dayLabel, dayNum}}
+			{@const dayMeetings = meetingsByDate.get(iso) ?? []}
+			{@const isToday = iso === todayLocalISODate()}
+			<div
+				class="fulcrum-dashboard-meetings__day-col"
+				class:fulcrum-dashboard-meetings__day-col--today={isToday}
+				role="columnheader"
+			>
+				<div class="fulcrum-dashboard-meetings__day-head">
+					<span class="fulcrum-dashboard-meetings__day-name">{dayLabel}</span>
+					<span class="fulcrum-dashboard-meetings__day-num">{dayNum}</span>
+				</div>
+				<div class="fulcrum-dashboard-meetings__day-events">
+					{#if dayMeetings.length === 0}
+						<span class="fulcrum-muted fulcrum-dashboard-meetings__empty">—</span>
+					{:else}
+						{#each dayMeetings as m (m.file.path)}
+							<button
+								type="button"
+								class="fulcrum-linklike fulcrum-dashboard-meetings__event"
+								on:click={() => openFile(m.file.path)}
+							>
+								{m.title ?? "Meeting"}
+							</button>
+						{/each}
+					{/if}
+				</div>
+			</div>
+		{/each}
+	</div>
 </section>

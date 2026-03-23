@@ -6,7 +6,10 @@ import {
 	Setting,
 	TFile,
 } from "obsidian";
-import {markProjectCompleteAndMove} from "./projectCompletion";
+import {
+	markProjectCompleteAndMove,
+	moveProjectToStatusFolder,
+} from "./projectCompletion";
 import {
 	appendFulcrumProjectLog,
 	formatFulcrumProjectLogLine,
@@ -16,6 +19,7 @@ import {
 import type {FulcrumHost} from "./pluginBridge";
 import {parseList} from "./settingsDefaults";
 import type {IndexedProject} from "./types";
+import {getImmediateSubfolderNames} from "./utils/paths";
 
 export class ProjectPickerModal extends FuzzySuggestModal<IndexedProject> {
 	private readonly projects: IndexedProject[];
@@ -308,6 +312,170 @@ export class MarkReviewedModal extends Modal {
 		} catch (e) {
 			console.error(e);
 			new Notice("Could not mark reviewed or write the log.");
+		}
+	}
+}
+
+export class ChangeProjectStatusModal extends Modal {
+	private selectedStatus: string | null = null;
+	private setFrontmatter = true;
+	private updateFolder: boolean;
+
+	constructor(
+		app: App,
+		private readonly host: FulcrumHost,
+		private readonly projectPath: string,
+		private readonly currentStatus: string,
+		private readonly onComplete?: (newPath?: string) => void | Promise<void>,
+	) {
+		super(app);
+		this.updateFolder =
+			host.settings.projectStatusIndication === "subfolder" &&
+			host.settings.areasProjectsFolder.trim().length > 0;
+	}
+
+	onOpen(): void {
+		const {contentEl} = this;
+		contentEl.empty();
+		contentEl.createEl("h2", {text: "Change project status"});
+
+		let statusOptions: string[];
+		const useSubfolders =
+			this.host.settings.projectStatusIndication === "subfolder" &&
+			this.host.settings.areasProjectsFolder.trim().length > 0;
+		if (useSubfolders) {
+			const folderNames = getImmediateSubfolderNames(
+				this.app.vault,
+				this.host.settings.areasProjectsFolder,
+			);
+			const configured = parseList(this.host.settings.projectStatuses)
+				.map((s) => s.trim())
+				.filter(Boolean);
+			const folderSet = new Set(folderNames.map((n) => n.toLowerCase()));
+			const extra = configured.filter((s) => !folderSet.has(s.toLowerCase()));
+			statusOptions = folderNames.length > 0 ? [...folderNames, ...extra] : configured;
+		} else {
+			statusOptions = parseList(this.host.settings.projectStatuses)
+				.map((s) => s.trim())
+				.filter(Boolean);
+		}
+		if (statusOptions.length === 0) {
+			contentEl.createEl("p", {cls: "fulcrum-muted", text: "No statuses configured in settings."});
+			new Setting(contentEl).addButton((b) => b.setButtonText("Close").onClick(() => this.close()));
+			return;
+		}
+
+		contentEl.createEl("p", {
+			cls: "fulcrum-muted",
+			text: "Choose a status, then confirm how to apply the change.",
+		});
+
+		new Setting(contentEl)
+			.setName("Status")
+			.addDropdown((d) => {
+				d.addOption("", "(select)");
+				for (const s of statusOptions) {
+					const label = s.replace(/\b\w/g, (c) => c.toUpperCase());
+					d.addOption(s, label);
+				}
+				d.onChange((v) => {
+					this.selectedStatus = v || null;
+					this.refreshConfirmSection();
+				});
+			});
+
+		this.confirmSection = contentEl.createDiv({cls: "fulcrum-change-status-confirm"});
+		this.refreshConfirmSection();
+	}
+
+	private confirmSection!: HTMLDivElement;
+
+	private refreshConfirmSection(): void {
+		this.confirmSection.empty();
+		if (!this.selectedStatus) return;
+
+		this.confirmSection.createEl("p", {
+			text: `Change status to: ${this.selectedStatus.replace(/\b\w/g, (c) => c.toUpperCase())}`,
+		});
+
+		new Setting(this.confirmSection)
+			.setName("Set frontmatter")
+			.setDesc("Update the status field in the note's YAML frontmatter.")
+			.addToggle((t) =>
+				t.setValue(this.setFrontmatter).onChange((v) => {
+					this.setFrontmatter = v;
+				}),
+			);
+
+		const canUpdateFolder =
+			this.host.settings.projectStatusIndication === "subfolder" &&
+			this.host.settings.areasProjectsFolder.trim().length > 0;
+		if (canUpdateFolder) {
+			new Setting(this.confirmSection)
+				.setName("Update folder")
+				.setDesc(
+					"Move the note into the folder for this status (under your areas & projects path).",
+				)
+				.addToggle((t) =>
+					t.setValue(this.updateFolder).onChange((v) => {
+						this.updateFolder = v;
+					}),
+				);
+		}
+
+		new Setting(this.confirmSection).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()));
+
+		new Setting(this.confirmSection).addButton((b) =>
+			b
+				.setButtonText("Confirm")
+				.setCta()
+				.onClick(() => {
+					void this.submit();
+				}),
+		);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+
+	private async submit(): Promise<void> {
+		if (!this.selectedStatus) return;
+
+		const f = this.app.vault.getAbstractFileByPath(this.projectPath);
+		if (!(f instanceof TFile)) {
+			new Notice("Project file not found.");
+			return;
+		}
+
+		try {
+			if (this.setFrontmatter) {
+				const statusKey =
+					this.host.settings.projectStatusField.trim().replace(/:+$/u, "") || "status";
+				const statusValue = this.selectedStatus.trim().toLowerCase();
+				await this.app.fileManager.processFrontMatter(f, (fm) => {
+					(fm as Record<string, unknown>)[statusKey] = statusValue;
+				});
+			}
+
+			let newPath: string | undefined;
+			if (this.updateFolder) {
+				newPath = await moveProjectToStatusFolder(
+					this.app,
+					f,
+					this.host.settings,
+					this.selectedStatus,
+				);
+			}
+
+			await this.host.vaultIndex.rebuild();
+			new Notice("Project status updated.");
+			this.close();
+			await this.onComplete?.(newPath);
+		} catch (e) {
+			console.error(e);
+			const msg = e instanceof Error ? e.message : String(e);
+			new Notice(msg.length < 120 ? msg : "Could not update project status.");
 		}
 	}
 }
