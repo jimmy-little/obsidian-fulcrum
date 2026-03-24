@@ -345,8 +345,9 @@
 						</div>
 						<div class="fulcrum-calendar__day-events-overlay">
 							{#each timed as e (e.task ? `${e.task.file.path}:${e.task.line ?? ""}:${e.startMinutes}` : `${e.meeting?.file.path ?? ""}:${e.startMinutes}`)}
-								{@const topPct = ((e.startMinutes ?? 0) / 60) * 100}
-								{@const heightPct = ((e.durationMinutes ?? 30) / 60) * 100}
+								{@const totalMinutes = 24 * 60}
+								{@const topPct = ((e.startMinutes ?? 0) / totalMinutes) * 100}
+								{@const heightPct = ((e.durationMinutes ?? 30) / totalMinutes) * 100}
 								<button
 									type="button"
 									class="fulcrum-calendar__timed-event fulcrum-calendar__timed-event--{e.kind}"

@@ -103,7 +103,7 @@ export interface ProjectRollup {
 	overdueTasks: number;
 	completionRatio: number;
 	nextTasks: IndexedTask[];
-	/** Task + atomic + project self + meetings (tracked minutes if set, else duration estimate). */
+	/** Task + atomic + project self + meetings (positive tracked FM if set, else duration minutes). */
 	aggregatedTrackedMinutes: number;
 	pageMeta: ProjectPageMeta;
 

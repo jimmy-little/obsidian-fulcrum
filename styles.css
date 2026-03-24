@@ -406,6 +406,95 @@ If your plugin does not need CSS, delete this file.
 	border-bottom: none;
 }
 
+/* Next up: no priority/due left stripe on tasks (keeps row grid aligned with note rows). */
+.fulcrum-next-up-list .fulcrum-task-card {
+	--fulcrum-task-border: transparent;
+	border-left: none;
+	padding-left: 0;
+}
+
+.fulcrum-next-up-list--with-meetings-above {
+	margin-top: 0.65rem;
+}
+
+.fulcrum-next-up-meetings-row {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+	align-items: stretch;
+	gap: 0.55rem;
+	margin-top: 0.35rem;
+}
+
+.fulcrum-next-up-meetings-row__cell {
+	display: flex;
+	align-items: stretch;
+	min-width: 0;
+	min-height: 0;
+}
+
+.fulcrum-next-up-meeting-card {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: row;
+	align-items: flex-start;
+	align-self: stretch;
+	gap: 0.5rem;
+	width: 100%;
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0.55rem 0.6rem 0.6rem;
+	text-align: left;
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 85%, transparent);
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-primary);
+	box-shadow: 0 1px 2px color-mix(in srgb, var(--background-modifier-border) 35%, transparent);
+	font: inherit;
+	color: var(--text-normal);
+	cursor: pointer;
+	outline: none;
+}
+
+.fulcrum-next-up-meeting-card:hover {
+	background: var(--background-modifier-hover);
+}
+
+.fulcrum-next-up-meeting-card:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+}
+
+.fulcrum-next-up-meeting-card__icon {
+	flex: 0 0 auto;
+	color: var(--text-accent);
+	line-height: 0;
+	margin-top: 0.08rem;
+}
+
+.fulcrum-next-up-meeting-card__body {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	gap: 0.2rem;
+}
+
+.fulcrum-next-up-meeting-card__title {
+	font-size: var(--font-ui-small);
+	font-weight: 600;
+	line-height: 1.35;
+	word-break: break-word;
+}
+
+.fulcrum-next-up-meeting-card__when {
+	font-size: var(--font-ui-smaller);
+	font-weight: 400;
+	line-height: 1.4;
+	color: var(--text-muted);
+	word-break: break-word;
+}
+
 .fulcrum-activity-row {
 	display: block;
 	width: 100%;
@@ -495,6 +584,22 @@ If your plugin does not need CSS, delete this file.
 	color: var(--text-accent);
 }
 
+/* Aggregated feed: project-colored timeline */
+.fulcrum-activity-timeline__track--accent .fulcrum-activity-timeline__stem {
+	background: var(--fulcrum-row-accent, var(--background-modifier-border));
+}
+
+.fulcrum-activity-timeline__track--accent .fulcrum-activity-timeline__node {
+	border-color: var(--fulcrum-row-accent, var(--background-modifier-border));
+	color: var(--fulcrum-row-accent, var(--text-muted));
+}
+
+.fulcrum-activity-row--timeline:hover .fulcrum-activity-timeline__track--accent .fulcrum-activity-timeline__node,
+.fulcrum-activity-row--icon:hover .fulcrum-activity-timeline__track--accent .fulcrum-activity-timeline__node {
+	border-color: var(--fulcrum-row-accent);
+	color: var(--fulcrum-row-accent);
+}
+
 .fulcrum-activity-row__body {
 	min-width: 0;
 	padding: 0.55rem 0 0.6rem;
@@ -571,6 +676,12 @@ If your plugin does not need CSS, delete this file.
 /* Tracked-time chip: plain text with hourglass icon */
 .fulcrum-activity-chip--tracked {
 	color: var(--text-muted);
+}
+
+/* Project chip (+ProjectName, like task cards) */
+.fulcrum-activity-chip--project {
+	color: var(--text-accent);
+	font-weight: 500;
 }
 
 /* Status chip */
@@ -1463,24 +1574,66 @@ button.fulcrum-task-card__note-type:focus-visible {
 }
 
 /* Sidebar project list — full-width table-style rows */
+.fulcrum-project-list-panel__group-header {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
+	background: color-mix(in srgb, var(--background-secondary) 65%, var(--background-primary));
+}
+
+.fulcrum-project-list-panel__group-toggle {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.5rem;
+	height: 1.5rem;
+	padding: 0;
+	margin: 0;
+	border: none;
+	border-radius: var(--radius-s);
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.fulcrum-project-list-panel__group-toggle:hover {
+	color: var(--text-normal);
+	background: color-mix(in srgb, var(--background-modifier-hover) 60%, transparent);
+}
+
+.fulcrum-project-list-panel__group-chevron {
+	display: inline-block;
+	font-size: 0.7rem;
+	transition: transform 0.15s ease;
+}
+
+.fulcrum-project-list-panel__group-chevron--collapsed {
+	transform: rotate(-90deg);
+}
+
 .fulcrum-project-list-panel__group .fulcrum-dashboard__area-group-title {
 	margin: 0;
-	padding: 0.4rem 0.45rem 0.35rem;
+	padding: 0.4rem 0.45rem 0.35rem 0;
 	font-size: var(--font-ui-smaller);
 	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	color: var(--text-muted);
 	border: none;
-	border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
-	background: color-mix(in srgb, var(--background-secondary) 65%, var(--background-primary));
+	background: transparent;
+	flex: 1;
+	min-width: 0;
 }
 
 .fulcrum-project-list-panel__group .fulcrum-dashboard__area-group-title .fulcrum-linklike {
+	display: block;
 	width: 100%;
 	padding: 0;
 	margin: 0;
 	box-sizing: border-box;
+	text-align: left;
 }
 
 .fulcrum-project-list-panel .fulcrum-dashboard__area-group {
@@ -1539,16 +1692,80 @@ button.fulcrum-task-card__note-type:focus-visible {
 	background: color-mix(in srgb, var(--interactive-accent) 16%, var(--background-primary));
 }
 
-.fulcrum-pl-row__dot {
-	flex: 0 0 auto;
-	align-self: center;
-	width: 8px;
-	height: 8px;
-	margin: 0 0 0 0.4rem;
-	border-radius: 50%;
-	background: var(--text-error);
-	box-shadow: 0 0 0 1px color-mix(in srgb, var(--background-primary) 45%, transparent);
-	pointer-events: none;
+/* Dashboard “Needs attention” tiles — slightly larger than sidebar rows */
+.fulcrum-pl-row--tile {
+	width: 100%;
+	border-radius: var(--radius-m, 8px);
+	border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
+	box-shadow: 0 1px 2px color-mix(in srgb, var(--background-modifier-border) 40%, transparent);
+}
+
+.fulcrum-pl-row--tile .fulcrum-pl-row__inner {
+	padding: 0.62rem 0.55rem 0.65rem 0.62rem;
+}
+
+.fulcrum-pl-row--tile .fulcrum-pl-row__name {
+	font-size: var(--font-ui-normal);
+}
+
+.fulcrum-pl-row--tile .fulcrum-pl-row__area {
+	font-size: var(--font-ui-small);
+}
+
+.fulcrum-pl-row--tile .fulcrum-pl-row__desc {
+	font-size: var(--font-ui-small);
+	-webkit-line-clamp: 3;
+	line-clamp: 3;
+}
+
+.fulcrum-pl-row--tile .fulcrum-pl-row__meta {
+	font-size: var(--font-ui-small);
+}
+
+.fulcrum-pl-row--tile .fulcrum-pl-row__notif svg {
+	width: 15px;
+	height: 15px;
+}
+
+.fulcrum-dashboard-attention-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr));
+	gap: 0.65rem;
+	margin-top: 0.35rem;
+}
+
+.fulcrum-dashboard-attention__cell {
+	min-width: 0;
+}
+
+.fulcrum-pl-row__notifs {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	margin-left: 0.15rem;
+}
+
+.fulcrum-pl-row__notif {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.15rem;
+}
+
+.fulcrum-pl-row__notif--overdue {
+	color: var(--text-error);
+}
+
+.fulcrum-pl-row__notif--tasks {
+	color: var(--color-purple);
+}
+
+.fulcrum-pl-row__notif--meetings {
+	color: var(--color-blue);
+}
+
+.fulcrum-pl-row__notif-count {
+	font-size: 0.85em;
+	font-weight: 500;
 }
 
 .fulcrum-pl-row__inner {
@@ -1559,10 +1776,6 @@ button.fulcrum-task-card__note-type:focus-visible {
 	align-items: stretch;
 	padding: 0.48rem 0.45rem 0.52rem 0.5rem;
 	box-sizing: border-box;
-}
-
-.fulcrum-pl-row:not(.fulcrum-pl-row--overdue) .fulcrum-pl-row__inner {
-	padding-left: 0.55rem;
 }
 
 .fulcrum-pl-row__head {
@@ -2720,4 +2933,410 @@ button.fulcrum-task-card__note-type:focus-visible {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* —— Time tracked (Project Manager) —— */
+
+.fulcrum-time-dashboard {
+	padding: 0 0 1rem;
+	max-width: 72rem;
+}
+
+.fulcrum-time-dashboard__disclaimer {
+	margin: 0 0 1rem;
+	font-size: var(--font-ui-smaller);
+	line-height: 1.45;
+}
+
+.fulcrum-time-dashboard__toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.65rem;
+	margin-bottom: 1.25rem;
+}
+
+.fulcrum-time-dashboard__toolbar-label {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	font-weight: 500;
+}
+
+.fulcrum-time-dashboard__segments {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+}
+
+.fulcrum-time-dashboard__seg {
+	font-size: var(--font-ui-small);
+	padding: 0.35rem 0.65rem;
+	border-radius: var(--radius-s);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.fulcrum-time-dashboard__seg:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.fulcrum-time-dashboard__seg--active {
+	color: var(--text-normal);
+	border-color: var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+}
+
+.fulcrum-time-dashboard__seg--toggle {
+	max-width: 11rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fulcrum-time-dashboard__seg--toggle:not(.fulcrum-time-dashboard__seg--active) {
+	opacity: 0.5;
+}
+
+.fulcrum-time-dashboard__kpis {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+	gap: 0.75rem;
+	margin-bottom: 1.5rem;
+}
+
+.fulcrum-time-kpi {
+	padding: 0.75rem 0.85rem;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+}
+
+.fulcrum-time-kpi__value {
+	font-size: var(--font-ui-large);
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	line-height: 1.2;
+}
+
+.fulcrum-time-kpi__label {
+	margin-top: 0.25rem;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.fulcrum-time-dashboard__section {
+	margin-bottom: 1.75rem;
+}
+
+.fulcrum-time-dashboard__section h2 {
+	margin: 0 0 0.65rem;
+	font-size: var(--font-ui-medium);
+	font-weight: 600;
+}
+
+.fulcrum-time-dashboard__section-lead {
+	margin: -0.35rem 0 0.75rem;
+	font-size: var(--font-ui-smaller);
+}
+
+.fulcrum-time-dashboard__charts-row {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+	gap: 1.25rem;
+	margin-bottom: 1.75rem;
+	align-items: start;
+}
+
+.fulcrum-time-dashboard__section--chart {
+	margin-bottom: 0;
+}
+
+.fulcrum-time-insights {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.fulcrum-time-insight {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 0.25rem 1rem;
+	padding: 0.55rem 0.7rem;
+	border-radius: var(--radius-s);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	font-size: var(--font-ui-small);
+}
+
+.fulcrum-time-insight__label {
+	color: var(--text-muted);
+}
+
+.fulcrum-time-insight__value {
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+.fulcrum-time-insight__hint {
+	grid-column: 1 / -1;
+	font-size: var(--font-ui-smaller);
+}
+
+.fulcrum-time-pie-wrap {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 1rem;
+}
+
+.fulcrum-time-pie {
+	width: 10rem;
+	height: 10rem;
+	border-radius: 50%;
+	flex-shrink: 0;
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border);
+}
+
+.fulcrum-time-pie-legend {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	flex: 1;
+	min-width: 12rem;
+	font-size: var(--font-ui-smaller);
+}
+
+.fulcrum-time-pie-legend li {
+	display: flex;
+	align-items: center;
+	gap: 0.45rem;
+	margin-bottom: 0.35rem;
+}
+
+.fulcrum-time-pie-legend__swatch {
+	width: 0.65rem;
+	height: 0.65rem;
+	border-radius: 2px;
+	flex-shrink: 0;
+}
+
+.fulcrum-time-pie-legend__label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fulcrum-time-pie-legend__val {
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+}
+
+.fulcrum-time-bars {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.fulcrum-time-bar {
+	display: grid;
+	grid-template-columns: minmax(0, 7rem) 1fr auto;
+	align-items: center;
+	gap: 0.45rem 0.6rem;
+	font-size: var(--font-ui-smaller);
+}
+
+.fulcrum-time-bar__name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fulcrum-time-bar__track {
+	height: 0.55rem;
+	border-radius: 3px;
+	background: var(--background-modifier-border);
+	overflow: hidden;
+}
+
+.fulcrum-time-bar__fill {
+	height: 100%;
+	border-radius: 3px;
+	min-width: 2px;
+	transition: width 0.2s ease;
+}
+
+.fulcrum-time-bar__val {
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+	min-width: 3.25rem;
+	text-align: right;
+}
+
+.fulcrum-time-stack-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.45rem;
+}
+
+.fulcrum-time-stack-row {
+	display: grid;
+	grid-template-columns: minmax(0, 9rem) 1fr auto;
+	align-items: center;
+	gap: 0.5rem 0.65rem;
+	width: 100%;
+	text-align: left;
+	padding: 0.45rem 0.5rem;
+	border-radius: var(--radius-s);
+	border: 1px solid transparent;
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+}
+
+.fulcrum-time-stack-row:hover {
+	border-color: var(--background-modifier-border);
+	background: var(--background-modifier-hover);
+}
+
+.fulcrum-time-stack-row__name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 500;
+}
+
+.fulcrum-time-stack-row__bar {
+	display: flex;
+	height: 0.65rem;
+	border-radius: 3px;
+	overflow: hidden;
+	background: var(--background-modifier-border);
+}
+
+.fulcrum-time-stack-row__seg {
+	display: block;
+	height: 100%;
+	min-width: 0;
+}
+
+.fulcrum-time-stack-row__seg--tasks {
+	background: var(--interactive-accent);
+}
+
+.fulcrum-time-stack-row__seg--meetings {
+	background: color-mix(in srgb, #c2410c 78%, var(--text-muted));
+}
+
+.fulcrum-time-stack-row__seg--atomic {
+	background: color-mix(in srgb, #0e7490 72%, var(--text-muted));
+}
+
+.fulcrum-time-stack-row__seg--project {
+	background: color-mix(in srgb, #6d28d9 70%, var(--text-muted));
+}
+
+.fulcrum-time-stack-row__total {
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+	min-width: 3.5rem;
+	text-align: right;
+}
+
+.fulcrum-time-stack-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.65rem 1rem;
+	margin-top: 0.65rem;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.fulcrum-time-stack-legend__i {
+	display: inline-block;
+	width: 0.6rem;
+	height: 0.6rem;
+	border-radius: 2px;
+	margin-right: 0.35rem;
+	vertical-align: middle;
+}
+
+.fulcrum-time-stack-legend__i--tasks {
+	background: var(--interactive-accent);
+}
+
+.fulcrum-time-stack-legend__i--meetings {
+	background: color-mix(in srgb, #c2410c 78%, var(--text-muted));
+}
+
+.fulcrum-time-stack-legend__i--atomic {
+	background: color-mix(in srgb, #0e7490 72%, var(--text-muted));
+}
+
+.fulcrum-time-stack-legend__i--project {
+	background: color-mix(in srgb, #6d28d9 70%, var(--text-muted));
+}
+
+.fulcrum-time-table-wrap {
+	overflow-x: auto;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+}
+
+.fulcrum-time-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--font-ui-smaller);
+}
+
+.fulcrum-time-table th,
+.fulcrum-time-table td {
+	padding: 0.45rem 0.6rem;
+	text-align: left;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.fulcrum-time-table thead th {
+	font-weight: 600;
+	color: var(--text-muted);
+	background: var(--background-secondary);
+}
+
+.fulcrum-time-table__num {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.fulcrum-time-table__proj {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: 0.15rem 0 0.15rem 0.45rem;
+	border: none;
+	border-left: 3px solid var(--interactive-accent);
+	border-radius: 2px;
+	background: transparent;
+	color: var(--text-normal);
+	font-size: inherit;
+	cursor: pointer;
+}
+
+.fulcrum-time-table__proj:hover {
+	background: var(--background-modifier-hover);
+}
+
+.fulcrum-time-deepcut {
+	margin: 0;
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
 }

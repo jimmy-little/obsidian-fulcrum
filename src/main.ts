@@ -22,7 +22,11 @@ import {
 	ProjectPickerModal,
 } from "./fulcrum/modals";
 import type {FulcrumHost} from "./fulcrum/pluginBridge";
-import {openProjectSummaryLeaf, revealOrCreateDashboard} from "./fulcrum/openViews";
+import {
+	openProjectSummaryLeaf,
+	revealOrCreateDashboard,
+	revealOrCreateTimeTracked,
+} from "./fulcrum/openViews";
 import {DEFAULT_SETTINGS, type FulcrumSettings} from "./fulcrum/settingsDefaults";
 import {postTaskNotesToggleStatus} from "./fulcrum/taskNotesApi";
 import {toggleInlineTaskLine, toggleTaskNoteFrontmatter} from "./fulcrum/taskVaultToggle";
@@ -112,6 +116,13 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 			name: "Open Project Manager",
 			callback: () => {
 				void this.openDashboard();
+			},
+		});
+		this.addCommand({
+			id: "open-time-tracked",
+			name: "Open time tracked",
+			callback: () => {
+				void this.openTimeTracked();
 			},
 		});
 		this.addCommand({
@@ -250,6 +261,17 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 		) {
 			merged.calendarViewMode = DEFAULT_SETTINGS.calendarViewMode;
 		}
+		if (
+			merged.timeTrackerHorizon !== "7d" &&
+			merged.timeTrackerHorizon !== "30d" &&
+			merged.timeTrackerHorizon !== "90d" &&
+			merged.timeTrackerHorizon !== "all"
+		) {
+			merged.timeTrackerHorizon = DEFAULT_SETTINGS.timeTrackerHorizon;
+		}
+		if (!Array.isArray(merged.timeTrackerExcludedAreaPaths)) {
+			merged.timeTrackerExcludedAreaPaths = DEFAULT_SETTINGS.timeTrackerExcludedAreaPaths;
+		}
 
 		this.settings = merged as FulcrumSettings;
 	}
@@ -331,6 +353,10 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 
 	async openDashboard(): Promise<void> {
 		await revealOrCreateDashboard(this.app, this.settings);
+	}
+
+	async openTimeTracked(): Promise<void> {
+		await revealOrCreateTimeTracked(this.app, this.settings);
 	}
 
 	async openProjectSummary(path: string): Promise<void> {

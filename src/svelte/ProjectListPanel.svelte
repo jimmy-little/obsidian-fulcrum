@@ -4,20 +4,21 @@
 	import {indexRevision, settingsRevision} from "../fulcrum/stores";
 	import {parseList} from "../fulcrum/settingsDefaults";
 	import type {IndexedArea, IndexedProject} from "../fulcrum/types";
+	import {buildProjectSidebarCounts} from "../fulcrum/utils/projectSidebarCounts";
 	import {sortIndexedProjects} from "../fulcrum/utils/projectListSort";
 	import ProjectListRow from "./ProjectListRow.svelte";
 
 	const NONE_KEY = "__none__";
 
 	export let plugin: FulcrumHost;
+
+	/** Set of group keys that are collapsed. Key = `groupBy:label` */
+	let collapsedGroups = new Set<string>();
 	export let selectedPath: string | null = null;
 	export let onSelectProject: (path: string) => void;
 
 	let filterOpen = false;
 	let filterAnchorEl: HTMLDivElement | null = null;
-	/** Pending filter state (not applied until Apply button pressed). Synced from settings when panel opens. */
-	let pendingUncheckedStatus: string[] = [];
-	let pendingUncheckedArea: string[] = [];
 	let searchQuery = "";
 
 	let snapshot = plugin.vaultIndex.getSnapshot();
@@ -29,10 +30,16 @@
 
 	$: sRev = $settingsRevision;
 	$: doneProject = (void sRev, new Set(parseList(plugin.settings.projectDoneStatuses)));
-	$: activeProjectRaw = snapshot.projects.filter((p) => !doneProject.has(p.status));
-	/** Applied filter (from settings) - used for displayed list. */
-	$: uncheckedStatus = new Set(plugin.settings.projectSidebarFilterUncheckedStatus);
-	$: uncheckedArea = new Set(plugin.settings.projectSidebarFilterUncheckedArea);
+	$: doneTask = (void sRev, new Set(parseList(plugin.settings.taskDoneStatuses)));
+
+	/** Per-project counts for sidebar notifications. */
+	$: projectCounts = buildProjectSidebarCounts(snapshot, doneTask);
+	$: activeProjectRaw = snapshot.projects.filter((p) =>
+		!doneProject.has((p.status ?? "").trim().toLowerCase()),
+	);
+	/** Applied filter (from settings) - used for displayed list. Re-read when settings change. */
+	$: uncheckedStatus = (void sRev, new Set(plugin.settings.projectSidebarFilterUncheckedStatus ?? []));
+	$: uncheckedArea = (void sRev, new Set(plugin.settings.projectSidebarFilterUncheckedArea ?? []));
 
 	// Indexed status options: all unique status values from active projects + None
 	$: statusOptions = ((): { key: string; label: string }[] => {
@@ -79,15 +86,17 @@
 	})();
 
 	// Filter: project passes if (status checked OR all status checked) AND (area checked OR all area checked)
+	// Compare case-insensitively since status can vary in casing across projects.
 	$: activeProject = ((): IndexedProject[] => {
 		if (uncheckedStatus.size === 0 && uncheckedArea.size === 0) return activeProjectRaw;
 		const statusUnchecked = uncheckedStatus.size > 0;
 		const areaUnchecked = uncheckedArea.size > 0;
+		const statusSetLc = new Set([...uncheckedStatus].map((s) => s.toLowerCase()));
 		return activeProjectRaw.filter((p) => {
 			const statusKey = p.status?.trim() ? p.status : NONE_KEY;
 			const areaKey = p.areaFile?.path ?? NONE_KEY;
 			const statusPass =
-				!statusUnchecked || !uncheckedStatus.has(statusKey);
+				!statusUnchecked || !statusSetLc.has(statusKey.toLowerCase());
 			const areaPass = !areaUnchecked || !uncheckedArea.has(areaKey);
 			return statusPass && areaPass;
 		});
@@ -187,48 +196,38 @@
 		await plugin.patchSettings({projectSidebarSortDir: next});
 	}
 
-	function togglePendingStatus(key: string): void {
-		const set = new Set(pendingUncheckedStatus);
-		if (set.has(key)) set.delete(key);
-		else set.add(key);
-		pendingUncheckedStatus = [...set];
+	async function toggleStatusFilter(key: string): Promise<void> {
+		const keyLc = key.toLowerCase();
+		const arr = [...(plugin.settings.projectSidebarFilterUncheckedStatus ?? [])];
+		const i = arr.findIndex((s) => s.toLowerCase() === keyLc);
+		if (i >= 0) arr.splice(i, 1);
+		else arr.push(keyLc);
+		await plugin.patchSettings({projectSidebarFilterUncheckedStatus: arr});
 	}
 
-	function togglePendingArea(key: string): void {
-		const set = new Set(pendingUncheckedArea);
-		if (set.has(key)) set.delete(key);
-		else set.add(key);
-		pendingUncheckedArea = [...set];
+	async function toggleAreaFilter(key: string): Promise<void> {
+		const arr = [...(plugin.settings.projectSidebarFilterUncheckedArea ?? [])];
+		const i = arr.indexOf(key);
+		if (i >= 0) arr.splice(i, 1);
+		else arr.push(key);
+		await plugin.patchSettings({projectSidebarFilterUncheckedArea: arr});
 	}
 
-	function isPendingStatusChecked(key: string): boolean {
-		return !pendingUncheckedStatus.includes(key);
+	$: uncheckedStatusLc = new Set([...uncheckedStatus].map((s) => s.toLowerCase()));
+
+	function isStatusChecked(key: string): boolean {
+		return !uncheckedStatusLc.has(key.toLowerCase());
 	}
 
-	function isPendingAreaChecked(key: string): boolean {
-		return !pendingUncheckedArea.includes(key);
+	function isAreaChecked(key: string): boolean {
+		return !uncheckedArea.has(key);
 	}
 
-	/** Sync pending from settings when panel opens; apply pending to settings and close. */
 	function openFilterPanel(): void {
-		if (!filterOpen) {
-			pendingUncheckedStatus = [...plugin.settings.projectSidebarFilterUncheckedStatus];
-			pendingUncheckedArea = [...plugin.settings.projectSidebarFilterUncheckedArea];
-		}
 		filterOpen = !filterOpen;
 	}
 
 	async function applyFilters(): Promise<void> {
-		if (!filterOpen) {
-			// Panel closed: "Apply" = refresh with current filters; sync pending so we don't overwrite
-			pendingUncheckedStatus = [...plugin.settings.projectSidebarFilterUncheckedStatus];
-			pendingUncheckedArea = [...plugin.settings.projectSidebarFilterUncheckedArea];
-		}
-		await plugin.patchSettings({
-			projectSidebarFilterUncheckedStatus: pendingUncheckedStatus,
-			projectSidebarFilterUncheckedArea: pendingUncheckedArea,
-		});
-		filterOpen = false;
 		await plugin.refreshIndex();
 	}
 
@@ -246,6 +245,21 @@
 		if (f && "extension" in f) {
 			void plugin.app.workspace.getLeaf("tab").openFile(f);
 		}
+	}
+
+	function groupKey(label: string): string {
+		return `${groupBy}:${label}`;
+	}
+
+	function isGroupCollapsed(label: string): boolean {
+		return collapsedGroups.has(groupKey(label));
+	}
+
+	function toggleGroup(label: string): void {
+		const key = groupKey(label);
+		collapsedGroups = new Set(collapsedGroups);
+		if (collapsedGroups.has(key)) collapsedGroups.delete(key);
+		else collapsedGroups.add(key);
 	}
 </script>
 
@@ -324,8 +338,8 @@
 								<label class="fulcrum-project-list-panel__filter-check">
 									<input
 										type="checkbox"
-										checked={isPendingStatusChecked(opt.key)}
-										on:change={() => togglePendingStatus(opt.key)}
+										checked={isStatusChecked(opt.key)}
+										on:change={() => void toggleStatusFilter(opt.key)}
 									/>
 									<span>{opt.label}</span>
 								</label>
@@ -337,8 +351,8 @@
 								<label class="fulcrum-project-list-panel__filter-check">
 									<input
 										type="checkbox"
-										checked={isPendingAreaChecked(opt.key)}
-										on:change={() => togglePendingArea(opt.key)}
+										checked={isAreaChecked(opt.key)}
+										on:change={() => void toggleAreaFilter(opt.key)}
 									/>
 									<span>{opt.label}</span>
 								</label>
@@ -368,40 +382,78 @@
 	{:else if groupBy === "area"}
 		{#each areaGroups as g}
 			<div class="fulcrum-dashboard__area-group fulcrum-project-list-panel__group">
-				{#if g.kind === "area" && g.area}
-					<h3 class="fulcrum-dashboard__area-group-title">
-						<button
-							type="button"
-							class="fulcrum-linklike"
-							on:click={() => openAreaFile(g.area?.file.path ?? "")}
-						>
-							<span class="fulcrum-area-icon">{g.area?.icon ?? "▸"}</span>
-							<span>{g.label}</span>
-						</button>
-					</h3>
-				{:else}
-					<h3 class="fulcrum-dashboard__area-group-title">{g.label}</h3>
+				<div class="fulcrum-project-list-panel__group-header">
+					<button
+						type="button"
+						class="fulcrum-project-list-panel__group-toggle"
+						aria-expanded={!isGroupCollapsed(g.label)}
+						aria-label={isGroupCollapsed(g.label) ? "Expand" : "Collapse"}
+						on:click={() => toggleGroup(g.label)}
+					>
+						<span class="fulcrum-project-list-panel__group-chevron" class:fulcrum-project-list-panel__group-chevron--collapsed={isGroupCollapsed(g.label)}>▾</span>
+					</button>
+					{#if g.kind === "area" && g.area}
+						<h3 class="fulcrum-dashboard__area-group-title">
+							<button
+								type="button"
+								class="fulcrum-linklike"
+								on:click={() => openAreaFile(g.area?.file.path ?? "")}
+							>
+								<span class="fulcrum-area-icon">{g.area?.icon ?? "▸"}</span>
+								<span>{g.label}</span>
+							</button>
+						</h3>
+					{:else}
+						<h3 class="fulcrum-dashboard__area-group-title">{g.label}</h3>
+					{/if}
+				</div>
+				{#if !isGroupCollapsed(g.label)}
+					<ul class="fulcrum-sidebar-project-list">
+						{#each g.projects as p}
+							<li>
+								<ProjectListRow
+									{p}
+									{selectedPath}
+									{onSelectProject}
+									openTaskCount={projectCounts.get(p.file.path)?.openTasks ?? 0}
+									upcomingMeetingCount={projectCounts.get(p.file.path)?.upcomingMeetings ?? 0}
+								/>
+							</li>
+						{/each}
+					</ul>
 				{/if}
-				<ul class="fulcrum-sidebar-project-list">
-					{#each g.projects as p}
-						<li>
-							<ProjectListRow {p} {selectedPath} {onSelectProject} />
-						</li>
-					{/each}
-				</ul>
 			</div>
 		{/each}
 	{:else}
 		{#each statusGroups as sg}
 			<div class="fulcrum-dashboard__area-group fulcrum-project-list-panel__group">
-				<h3 class="fulcrum-dashboard__area-group-title">{sg.label}</h3>
-				<ul class="fulcrum-sidebar-project-list">
-					{#each sg.projects as p}
-						<li>
-							<ProjectListRow {p} {selectedPath} {onSelectProject} />
-						</li>
-					{/each}
-				</ul>
+				<div class="fulcrum-project-list-panel__group-header">
+					<button
+						type="button"
+						class="fulcrum-project-list-panel__group-toggle"
+						aria-expanded={!isGroupCollapsed(sg.label)}
+						aria-label={isGroupCollapsed(sg.label) ? "Expand" : "Collapse"}
+						on:click={() => toggleGroup(sg.label)}
+					>
+						<span class="fulcrum-project-list-panel__group-chevron" class:fulcrum-project-list-panel__group-chevron--collapsed={isGroupCollapsed(sg.label)}>▾</span>
+					</button>
+					<h3 class="fulcrum-dashboard__area-group-title">{sg.label}</h3>
+				</div>
+				{#if !isGroupCollapsed(sg.label)}
+					<ul class="fulcrum-sidebar-project-list">
+						{#each sg.projects as p}
+							<li>
+								<ProjectListRow
+									{p}
+									{selectedPath}
+									{onSelectProject}
+									openTaskCount={projectCounts.get(p.file.path)?.openTasks ?? 0}
+									upcomingMeetingCount={projectCounts.get(p.file.path)?.upcomingMeetings ?? 0}
+								/>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			</div>
 		{/each}
 	{/if}

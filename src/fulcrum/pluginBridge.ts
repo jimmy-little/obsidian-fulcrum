@@ -11,6 +11,7 @@ export interface FulcrumHost {
 	readonly vaultIndex: VaultIndex;
 	openProjectSummary(path: string): Promise<void>;
 	openDashboard(): Promise<void>;
+	openTimeTracked(): Promise<void>;
 	refreshIndex(): Promise<void>;
 	appendProjectLogEntry(projectPath: string, text: string): Promise<void>;
 	/** Opens modal: optional review note, updates review dates, appends Fulcrum log line. */

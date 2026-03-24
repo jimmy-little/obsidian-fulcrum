@@ -28,7 +28,7 @@ export class DashboardView extends ItemView {
 	async onOpen(): Promise<void> {
 		this.component = new Dashboard({
 			target: this.contentEl,
-			props: {plugin: this.host},
+			props: {plugin: this.host, hoverParentLeaf: this.leaf},
 		});
 	}
 

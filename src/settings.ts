@@ -83,6 +83,36 @@ export class FulcrumSettingTab extends PluginSettingTab {
 		this.textSetting("taskNoteYamlStatusOpen", "Task note status when open (vault fallback)");
 		this.textSetting("taskNoteYamlStatusDone", "Task note status when done (vault fallback)");
 		this.textSetting("meetingDateField", "Meeting date field");
+		new Setting(containerEl)
+			.setName("Meeting start time field")
+			.setDesc(
+				"Optional. When set, used for date+time (enables hourly blocks in calendar). Leave empty to use date field only.",
+			)
+			.addText((t) =>
+				t
+					.setPlaceholder("e.g. startTime")
+					.setValue(this.plugin.settings.meetingStartTimeField ?? "")
+					.onChange(async (v) => {
+						this.plugin.settings.meetingStartTimeField = v;
+						await this.plugin.saveSettings();
+						this.plugin.vaultIndex.scheduleRebuild();
+					}),
+			);
+		new Setting(containerEl)
+			.setName("Meeting end time field")
+			.setDesc(
+				"Optional. When set with start time, duration is computed from end − start. Otherwise uses duration field.",
+			)
+			.addText((t) =>
+				t
+					.setPlaceholder("e.g. endTime")
+					.setValue(this.plugin.settings.meetingEndTimeField ?? "")
+					.onChange(async (v) => {
+						this.plugin.settings.meetingEndTimeField = v;
+						await this.plugin.saveSettings();
+						this.plugin.vaultIndex.scheduleRebuild();
+					}),
+			);
 		this.textSetting("meetingDurationField", "Meeting duration field");
 		this.textSetting("meetingTotalMinutesField", "Meeting total minutes field");
 		this.textSetting("meetingTitleField", "Meeting title field");
@@ -270,6 +300,21 @@ export class FulcrumSettingTab extends PluginSettingTab {
 			);
 
 		heading(containerEl, "Display");
+		new Setting(containerEl)
+			.setName("Global activity display (days)")
+			.setDesc(
+				"How many days back to include in the Dashboard activity feed from all projects.",
+			)
+			.addSlider((sl) =>
+				sl
+					.setLimits(1, 90, 1)
+					.setValue(this.plugin.settings.globalActivityDisplayDays)
+					.setDynamicTooltip()
+					.onChange(async (v) => {
+						this.plugin.settings.globalActivityDisplayDays = v;
+						await this.plugin.saveSettings();
+					}),
+			);
 		new Setting(containerEl)
 			.setName("Project list: group by")
 			.setDesc("Dashboard and Project Manager sidebar. You can also change grouping from the list header.")

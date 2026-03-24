@@ -3,6 +3,9 @@ export type ProjectStatusIndication = "frontmatter" | "subfolder";
 export type ProjectSidebarSortBy = "launch" | "nextReview" | "rank";
 export type ProjectSidebarSortDir = "asc" | "desc";
 
+/** Saved time-tracked dashboard range. */
+export type TimeTrackerHorizon = "all" | "7d" | "30d" | "90d";
+
 export interface FulcrumSettings {
 	areasProjectsFolder: string;
 	meetingsFolder: string;
@@ -25,6 +28,10 @@ export interface FulcrumSettings {
 	taskNoteYamlStatusOpen: string;
 	taskNoteYamlStatusDone: string;
 	meetingDateField: string;
+	/** Optional. When set, used for date+time (hourly placement). Falls back to meetingDateField when empty. */
+	meetingStartTimeField: string;
+	/** Optional. When set and start has time, duration = end - start. Otherwise use meetingDurationField. */
+	meetingEndTimeField: string;
 	meetingDurationField: string;
 	meetingTotalMinutesField: string;
 	meetingTitleField: string;
@@ -104,6 +111,14 @@ export interface FulcrumSettings {
 
 	/** Delay in ms before showing page preview on hover (0 = instant). */
 	hoverPreviewDelayMs: number;
+
+	/** Global activity feed: how many days back to include (Dashboard). */
+	globalActivityDisplayDays: number;
+
+	/** Time tracked view: last selected horizon. */
+	timeTrackerHorizon: TimeTrackerHorizon;
+	/** Area note paths excluded from the time dashboard (empty = all areas on). */
+	timeTrackerExcludedAreaPaths: string[];
 }
 
 export const DEFAULT_SETTINGS: FulcrumSettings = {
@@ -127,6 +142,8 @@ export const DEFAULT_SETTINGS: FulcrumSettings = {
 	taskNoteYamlStatusOpen: "NONE",
 	taskNoteYamlStatusDone: "DONE",
 	meetingDateField: "date",
+	meetingStartTimeField: "",
+	meetingEndTimeField: "",
 	meetingDurationField: "duration",
 	meetingTotalMinutesField: "totalMinutesTracked",
 	meetingTitleField: "entry",
@@ -190,6 +207,11 @@ export const DEFAULT_SETTINGS: FulcrumSettings = {
 	peopleAvatarField: "avatar",
 
 	hoverPreviewDelayMs: 1500,
+
+	globalActivityDisplayDays: 7,
+
+	timeTrackerHorizon: "30d",
+	timeTrackerExcludedAreaPaths: [],
 };
 
 export function parseList(s: string): string[] {

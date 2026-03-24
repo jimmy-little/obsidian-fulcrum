@@ -5,14 +5,14 @@ import type {FulcrumHost} from "../fulcrum/pluginBridge";
 import ProjectManager from "../svelte/ProjectManager.svelte";
 
 export type ProjectManagerViewState = {
-	mode?: "dashboard" | "project" | "kanban" | "calendar";
+	mode?: "dashboard" | "project" | "kanban" | "calendar" | "time";
 	projectPath?: string;
 };
 
 export class ProjectManagerView extends ItemView {
 	private readonly host: FulcrumHost;
 	private component: SvelteComponent | null = null;
-	mainMode: "dashboard" | "project" | "kanban" | "calendar" = "dashboard";
+	mainMode: "dashboard" | "project" | "kanban" | "calendar" | "time" = "dashboard";
 	projectPath: string | null = null;
 
 	constructor(leaf: WorkspaceLeaf, host: FulcrumHost) {
@@ -31,6 +31,7 @@ export class ProjectManagerView extends ItemView {
 		}
 		if (this.mainMode === "kanban") return "Kanban";
 		if (this.mainMode === "calendar") return "Calendar";
+		if (this.mainMode === "time") return "Time tracked";
 		return "Fulcrum Project Manager";
 	}
 
@@ -44,6 +45,7 @@ export class ProjectManagerView extends ItemView {
 		}
 		if (this.mainMode === "kanban") return {mode: "kanban"};
 		if (this.mainMode === "calendar") return {mode: "calendar"};
+		if (this.mainMode === "time") return {mode: "time"};
 		return {mode: "dashboard"};
 	}
 
@@ -56,6 +58,9 @@ export class ProjectManagerView extends ItemView {
 			this.projectPath = null;
 		} else if (state?.mode === "calendar") {
 			this.mainMode = "calendar";
+			this.projectPath = null;
+		} else if (state?.mode === "time") {
+			this.mainMode = "time";
 			this.projectPath = null;
 		} else {
 			this.mainMode = "dashboard";
@@ -111,6 +116,13 @@ export class ProjectManagerView extends ItemView {
 						type: VIEW_PROJECT_MANAGER,
 						active: true,
 						state: {mode: "calendar"},
+					});
+				},
+				onSelectTime: () => {
+					void this.leaf.setViewState({
+						type: VIEW_PROJECT_MANAGER,
+						active: true,
+						state: {mode: "time"},
 					});
 				},
 			},

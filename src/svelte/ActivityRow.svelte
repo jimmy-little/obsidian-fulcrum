@@ -11,6 +11,8 @@
 	export let hoverParentLeaf: WorkspaceLeaf | undefined = undefined;
 	export let hoverPath: string | undefined = undefined;
 	export let variant: "default" | "timeline" | "icon" = "default";
+	/** Optional CSS color for timeline node/stem (e.g. project color in aggregated feed). */
+	export let accentColorCss: string | undefined = undefined;
 
 	let hoverTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -67,7 +69,9 @@
 		<div
 			class="fulcrum-activity-timeline__track"
 			class:fulcrum-activity-timeline__track--icon-only={variant === "icon"}
+			class:fulcrum-activity-timeline__track--accent={!!accentColorCss}
 			aria-hidden="true"
+			style={accentColorCss ? `--fulcrum-row-accent: ${accentColorCss};` : undefined}
 		>
 			<div class="fulcrum-activity-timeline__stem fulcrum-activity-timeline__stem--before"></div>
 			<div class="fulcrum-activity-timeline__node">
@@ -160,6 +164,8 @@
 						</span>
 					{:else if c.kind === "status"}
 						<span class="fulcrum-activity-chip fulcrum-activity-chip--status">{c.label}</span>
+					{:else if c.kind === "project"}
+						<span class="fulcrum-activity-chip fulcrum-activity-chip--project">{c.label}</span>
 					{:else}
 						<span class="fulcrum-activity-chip">{c.label}</span>
 					{/if}

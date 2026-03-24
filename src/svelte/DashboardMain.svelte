@@ -1,8 +1,12 @@
 <script lang="ts">
+	import type {WorkspaceLeaf} from "obsidian";
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
-	import type {IndexedMeeting} from "../fulcrum/types";
-	import {indexRevision} from "../fulcrum/stores";
+	import type {ProjectLogActivityEntry} from "../fulcrum/projectNote";
+	import type {IndexedMeeting, ProjectRollup} from "../fulcrum/types";
+	import {indexRevision, settingsRevision} from "../fulcrum/stores";
 	import {parseList} from "../fulcrum/settingsDefaults";
+	import type {IndexedProject} from "../fulcrum/types";
+	import {buildProjectSidebarCounts, projectReviewIsOverdue} from "../fulcrum/utils/projectSidebarCounts";
 	import {
 		todayLocalISODate,
 		isDueToday,
@@ -10,10 +14,18 @@
 		isDateInUpcomingDays,
 		dayStartMs,
 	} from "../fulcrum/utils/dates";
+	import {formatTrackedMinutesShort} from "../fulcrum/utils/dates";
 	import {addDays, toISODate, formatDayShort} from "../fulcrum/utils/calendarGrid";
+	import {
+		buildAggregatedActivityRows,
+		type ActivityRowModel,
+	} from "../fulcrum/utils/projectActivity";
 	import TaskCard from "./TaskCard.svelte";
+	import ActivityRow from "./ActivityRow.svelte";
+	import ProjectListRow from "./ProjectListRow.svelte";
 
 	export let plugin: FulcrumHost;
+	export let hoverParentLeaf: WorkspaceLeaf | undefined = undefined;
 
 	let snapshot = plugin.vaultIndex.getSnapshot();
 	$: rev = $indexRevision;
@@ -22,7 +34,27 @@
 		snapshot = plugin.vaultIndex.getSnapshot();
 	}
 
+	$: sRev = $settingsRevision;
 	$: doneTask = new Set(parseList(plugin.settings.taskDoneStatuses));
+	$: doneProject = (void sRev, new Set(parseList(plugin.settings.projectDoneStatuses)));
+
+	$: projectCounts = buildProjectSidebarCounts(snapshot, doneTask);
+
+	/** Active projects with open tasks, upcoming meetings (7d), or overdue review — same signals as the sidebar. */
+	$: attentionProjects = ((): IndexedProject[] => {
+		const out: IndexedProject[] = [];
+		for (const p of snapshot.projects) {
+			if (doneProject.has((p.status ?? "").trim().toLowerCase())) continue;
+			const overdue = projectReviewIsOverdue(p);
+			const c = projectCounts.get(p.file.path);
+			const openTasks = c?.openTasks ?? 0;
+			const upcomingMeetings = c?.upcomingMeetings ?? 0;
+			if (!overdue && openTasks === 0 && upcomingMeetings === 0) continue;
+			out.push(p);
+		}
+		out.sort((a, b) => a.name.localeCompare(b.name));
+		return out;
+	})();
 
 	$: tasksDueToday = snapshot.tasks.filter(
 		(t) => !doneTask.has(t.status) && isDueToday(t.dueDate, false),
@@ -77,46 +109,75 @@
 		.filter((t) => !doneTask.has(t.status) && isDueToday(t.dueDate, false))
 		.slice(0, 20);
 
+	let aggregatedActivity: ActivityRowModel[] = [];
+
+	$: {
+		void rev;
+		const active = plugin.vaultIndex.getActiveProjects(plugin.settings);
+		const load = async (): Promise<void> => {
+			const inputs = await Promise.all(
+				active.map(async (p) => {
+					const rollup = await plugin.vaultIndex.getProjectRollup(
+						p.file.path,
+						plugin.settings,
+					);
+					if (!rollup) return null;
+					const logEntries = await plugin.loadProjectLogActivity(p.file.path);
+					return {rollup, logEntries};
+				}),
+			);
+			const valid = inputs.filter(
+				(x): x is {rollup: ProjectRollup; logEntries: ProjectLogActivityEntry[]} =>
+					x != null,
+			);
+			aggregatedActivity = buildAggregatedActivityRows(valid, {
+				doneTask,
+				openPath: openFile,
+				openTask: (t) => plugin.openIndexedTask(t),
+				openProject: (path) => openFile(path),
+				formatTracked: formatTrackedMinutesShort,
+				lastNDaysMs: (plugin.settings.globalActivityDisplayDays ?? 7) * 86400000,
+			});
+		};
+		void load();
+	}
+
 	function openFile(path: string): void {
 		const f = plugin.app.vault.getAbstractFileByPath(path);
 		if (f && "extension" in f) {
 			void plugin.app.workspace.getLeaf("tab").openFile(f);
 		}
 	}
+
+	function openProjectSummary(path: string): void {
+		void plugin.openProjectSummary(path);
+	}
 </script>
 
 <section class="fulcrum-section">
 	<h2>Today</h2>
-	<div class="fulcrum-project-meta-strip">
-		<div class="fulcrum-project-meta-strip__row">
-			<span>Tasks due <span class="fulcrum-meta-days">{tasksDueToday.length}</span></span>
-			<span class="fulcrum-meta-sep">·</span>
-			<span>Overdue <span class="fulcrum-meta-days fulcrum-meta-days--since">{overdueTasks.length}</span></span>
-			<span class="fulcrum-meta-sep">·</span>
-			<span>Meetings today <span class="fulcrum-meta-days">{meetingsToday.length}</span></span>
-			<span class="fulcrum-meta-sep">·</span>
-			<span>Completed (7d) <span class="fulcrum-meta-days">{completedThisWeek.length}</span></span>
+	<div class="fulcrum-hero-row fulcrum-hero-row--quad">
+		<div class="fulcrum-mega-stat fulcrum-mega-stat--neutral">
+			<div class="fulcrum-mega-stat__value">{tasksDueToday.length}</div>
+			<div class="fulcrum-mega-stat__label">Tasks due</div>
+		</div>
+		<div class="fulcrum-mega-stat fulcrum-mega-stat--neutral">
+			<div class="fulcrum-mega-stat__value">{overdueTasks.length}</div>
+			<div class="fulcrum-mega-stat__label">Overdue</div>
+		</div>
+		<div class="fulcrum-mega-stat fulcrum-mega-stat--neutral">
+			<div class="fulcrum-mega-stat__value">{meetingsToday.length}</div>
+			<div class="fulcrum-mega-stat__label">Meetings today</div>
+		</div>
+		<div class="fulcrum-mega-stat fulcrum-mega-stat--neutral">
+			<div class="fulcrum-mega-stat__value">{completedThisWeek.length}</div>
+			<div class="fulcrum-mega-stat__label">Completed (7d)</div>
 		</div>
 	</div>
 </section>
 
 <section class="fulcrum-section">
-	<h2>Today’s tasks</h2>
-	{#if todayTasks.length === 0}
-		<p class="fulcrum-muted">Nothing due today in indexed tasks.</p>
-	{:else}
-		<ul class="fulcrum-task-list fulcrum-task-agenda-list">
-			{#each todayTasks as t}
-				<li>
-					<TaskCard plugin={plugin} task={t} done={doneTask.has(t.status)} showProjectLink={true} />
-				</li>
-			{/each}
-		</ul>
-	{/if}
-</section>
-
-<section class="fulcrum-section">
-	<h2>Upcoming meetings (7 days)</h2>
+	<h2>Upcoming</h2>
 	<div class="fulcrum-dashboard-meetings-grid" role="grid" aria-label="Meetings by day" style="--fulcrum-meetings-cols: 7">
 		{#each meetingGridDays as {iso, dayLabel, dayNum}}
 			{@const dayMeetings = meetingsByDate.get(iso) ?? []}
@@ -148,4 +209,68 @@
 			</div>
 		{/each}
 	</div>
+</section>
+
+<section class="fulcrum-section">
+	<h2>Today’s tasks</h2>
+	{#if todayTasks.length === 0}
+		<p class="fulcrum-muted">Nothing due today in indexed tasks.</p>
+	{:else}
+		<ul class="fulcrum-task-list fulcrum-task-agenda-list">
+			{#each todayTasks as t}
+				<li>
+					<TaskCard plugin={plugin} task={t} done={doneTask.has(t.status)} showProjectLink={true} />
+				</li>
+			{/each}
+		</ul>
+	{/if}
+</section>
+
+<section class="fulcrum-section">
+	<h2>Needs attention</h2>
+	{#if attentionProjects.length === 0}
+		<p class="fulcrum-muted">
+			No active projects with open tasks, meetings in the next 7 days, or an overdue review.
+		</p>
+	{:else}
+		<div class="fulcrum-dashboard-attention-grid">
+			{#each attentionProjects as p (p.file.path)}
+				<div class="fulcrum-dashboard-attention__cell">
+					<ProjectListRow
+						{p}
+						tile={true}
+						selectedPath={null}
+						onSelectProject={openProjectSummary}
+						openTaskCount={projectCounts.get(p.file.path)?.openTasks ?? 0}
+						upcomingMeetingCount={projectCounts.get(p.file.path)?.upcomingMeetings ?? 0}
+					/>
+				</div>
+			{/each}
+		</div>
+	{/if}
+</section>
+
+<section class="fulcrum-section">
+	<h2>Activity</h2>
+	{#if aggregatedActivity.length === 0}
+		<p class="fulcrum-muted">No activity in the configured period across active projects.</p>
+	{:else}
+		<ul class="fulcrum-activity-list fulcrum-activity-list--timeline">
+			{#each aggregatedActivity as row (row.id)}
+				<li>
+					<ActivityRow
+						variant="timeline"
+						title={row.title}
+						chips={row.chips}
+						kind={row.kind}
+						whenClick={row.open}
+						{plugin}
+						hoverParentLeaf={hoverParentLeaf}
+						hoverPath={row.hoverPath}
+						accentColorCss={row.accentColorCss}
+					/>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 </section>

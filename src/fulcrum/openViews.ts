@@ -11,16 +11,24 @@ function claimLeaf(app: App, settings: FulcrumSettings): WorkspaceLeaf {
 	return app.workspace.getLeaf("tab");
 }
 
+function resolveProjectManagerState(initial?: ProjectManagerViewState): ProjectManagerViewState {
+	if (!initial) return {mode: "dashboard"};
+	if (initial.mode === "project" && initial.projectPath) {
+		return {mode: "project", projectPath: initial.projectPath};
+	}
+	if (initial.mode === "kanban" || initial.mode === "calendar" || initial.mode === "time") {
+		return {mode: initial.mode};
+	}
+	return {mode: "dashboard"};
+}
+
 /** Primary Fulcrum shell: sidebars + dashboard or project in the main pane. */
 export async function revealOrCreateProjectManager(
 	app: App,
 	settings: FulcrumSettings,
 	initial?: ProjectManagerViewState,
 ): Promise<void> {
-	const state: ProjectManagerViewState =
-		initial?.mode === "project" && initial.projectPath
-			? {mode: "project", projectPath: initial.projectPath}
-			: {mode: "dashboard"};
+	const state = resolveProjectManagerState(initial);
 	const existing = app.workspace.getLeavesOfType(VIEW_PROJECT_MANAGER)[0];
 	if (existing) {
 		await existing.setViewState({
@@ -45,6 +53,13 @@ export async function revealOrCreateDashboard(
 	settings: FulcrumSettings,
 ): Promise<void> {
 	await revealOrCreateProjectManager(app, settings, {mode: "dashboard"});
+}
+
+export async function revealOrCreateTimeTracked(
+	app: App,
+	settings: FulcrumSettings,
+): Promise<void> {
+	await revealOrCreateProjectManager(app, settings, {mode: "time"});
 }
 
 export async function openProjectSummaryLeaf(

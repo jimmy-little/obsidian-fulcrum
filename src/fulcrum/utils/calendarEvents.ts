@@ -4,6 +4,7 @@
  */
 
 import type {IndexedMeeting, IndexedProject, IndexedTask} from "../types";
+import {meetingEffectiveMinutes} from "./meetingEffectiveMinutes";
 import {resolveProjectAccentCss} from "./projectVisual";
 
 export type CalendarEventKind = "task" | "meeting";
@@ -31,7 +32,8 @@ export type CalendarEvent = {
 const DEFAULT_DURATION_MINUTES = 30;
 
 /** Parse ISO-like string to { dateIso, minutesFromMidnight }.
- * Supports: YYYY-MM-DD, YYYY-MM-DDTHH:mm, YYYY-MM-DDTHH:mm:ss, YYYY-MM-DD HH:mm
+ * Supports: YYYY-MM-DD, YYYY-MM-DDTHH:mm, YYYY-MM-DDTHH:mm:ss, YYYY-MM-DD HH:mm,
+ * and locale formats like MM/DD/YYYY 11:45 AM via Date.parse fallback.
  */
 function parseDateTime(raw: string | undefined): {
 	dateIso: string;
@@ -40,19 +42,33 @@ function parseDateTime(raw: string | undefined): {
 	if (!raw?.trim()) return null;
 	const s = String(raw).trim();
 	const datePart = s.slice(0, 10);
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return null;
-
-	let minutesFromMidnight: number | null = null;
-	const tMatch = s.slice(10).match(/[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?/);
-	if (tMatch) {
-		const h = parseInt(tMatch[1]!, 10);
-		const m = parseInt(tMatch[2]!, 10);
-		if (h >= 0 && h < 24 && m >= 0 && m < 60) {
-			minutesFromMidnight = h * 60 + m;
+	if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+		let minutesFromMidnight: number | null = null;
+		const tMatch = s.slice(10).match(/[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+		if (tMatch) {
+			const h = parseInt(tMatch[1]!, 10);
+			const m = parseInt(tMatch[2]!, 10);
+			if (h >= 0 && h < 24 && m >= 0 && m < 60) {
+				minutesFromMidnight = h * 60 + m;
+			}
 		}
+		return {dateIso: datePart, minutesFromMidnight};
 	}
 
-	return {dateIso: datePart, minutesFromMidnight};
+	// Fallback for MM/DD/YYYY, MM/DD/YYYY HH:mm AM/PM, etc.
+	const ms = Date.parse(s);
+	if (Number.isNaN(ms)) return null;
+	const d = new Date(ms);
+	const y = d.getFullYear();
+	const mo = String(d.getMonth() + 1).padStart(2, "0");
+	const day = String(d.getDate()).padStart(2, "0");
+	const dateIso = `${y}-${mo}-${day}`;
+	const minutesFromMidnight = d.getHours() * 60 + d.getMinutes();
+	const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0 || d.getSeconds() !== 0;
+	return {
+		dateIso,
+		minutesFromMidnight: hasTime ? minutesFromMidnight : null,
+	};
 }
 
 /** Build calendar events from task. Uses scheduledDate and/or dueDate.
@@ -122,9 +138,10 @@ export function meetingToCalendarEvent(
 	const parsed = parseDateTime(m.date);
 	if (!parsed) return null;
 	const isAllDay = parsed.minutesFromMidnight == null;
+	const effective = meetingEffectiveMinutes(m);
 	const duration =
-		m.duration != null && Number.isFinite(m.duration) && m.duration > 0
-			? m.duration
+		effective > 0
+			? effective
 			: isAllDay
 				? null
 				: DEFAULT_DURATION_MINUTES;

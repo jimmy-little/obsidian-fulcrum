@@ -34,14 +34,20 @@ export function dayStartMs(d: Date = new Date()): number {
 	return x.getTime();
 }
 
-/** `isoDate` is YYYY-MM-DD (or longer); true if that calendar day is within the next `days` days from today (inclusive). */
+/**
+ * `isoDate` is YYYY-MM-DD (or longer). True if that **local** calendar day is within the next `days`
+ * days starting today (inclusive). Uses date-string comparison, not `Date.parse("YYYY-MM-DD")`, because
+ * the latter is UTC midnight and can shift to the previous local day west of UTC — which would exclude
+ * “today’s” meetings from the dashboard week grid while `slice(0,10) === todayLocalISODate()` still counts them.
+ */
 export function isDateInUpcomingDays(isoDate: string | undefined, days: number): boolean {
 	if (!isoDate) return false;
-	const t = Date.parse(isoDate.slice(0, 10));
-	if (Number.isNaN(t)) return false;
-	const start = dayStartMs();
-	const end = start + days * 86400000;
-	return t >= start && t <= end;
+	const norm = isoDate.slice(0, 10);
+	if (norm.length < 10) return false;
+	if (Number.isNaN(Date.parse(norm + "T12:00:00"))) return false;
+	const today = todayLocalISODate();
+	const lastInclusive = addDaysIso(today, days - 1);
+	return norm >= today && norm <= lastInclusive;
 }
 
 export function addDaysIso(isoDate: string, days: number): string {

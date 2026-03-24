@@ -14,12 +14,13 @@
 	} from "../fulcrum/utils/dates";
 	import {
 		buildActivityRowModels,
-		buildNextUpItems,
+		buildNextUpSegments,
 		incompleteProjectTasks,
 	} from "../fulcrum/utils/projectActivity";
 	import {preferLightForegroundOnAccentCss} from "../fulcrum/utils/projectVisual";
 	import type {ProjectLogActivityEntry} from "../fulcrum/projectNote";
 	import ActivityRow from "./ActivityRow.svelte";
+	import NextUpMeetingCard from "./NextUpMeetingCard.svelte";
 	import TaskCard from "./TaskCard.svelte";
 
 	export let plugin: FulcrumHost;
@@ -47,8 +48,8 @@
 	}
 
 	let logEntries: ProjectLogActivityEntry[] = [];
-	let logDraft = "";
 	let logBusy = false;
+	let logDraft = "";
 	let snapshotBtnEl: HTMLButtonElement | null = null;
 
 	async function loadLogActivity(): Promise<void> {
@@ -115,7 +116,9 @@
 		plugin.openMarkReviewedModal(projectPath, () => void loadLogActivity());
 	}
 
-	$: nextUpItems = rollup ? buildNextUpItems(rollup, doneTask, 8) : [];
+	$: nextUpSeg = rollup ? buildNextUpSegments(rollup, doneTask, 8) : {meetings: [], items: []};
+	$: nextUpMeetings = nextUpSeg.meetings;
+	$: nextUpListItems = nextUpSeg.items;
 
 	$: openTasks = rollup ? incompleteProjectTasks(rollup.tasks, doneTask) : [];
 
@@ -339,35 +342,52 @@
 
 		<section class="fulcrum-section">
 			<h2>Next up</h2>
-			{#if nextUpItems.length === 0}
-				<p class="fulcrum-muted">Nothing with a date of today or later (tasks need due or scheduled; notes use their primary date).</p>
+			{#if nextUpMeetings.length === 0 && nextUpListItems.length === 0}
+				<p class="fulcrum-muted">
+					Nothing with a date of today or later (tasks need due or scheduled; notes and meetings use their
+					primary date).
+				</p>
 			{:else}
-				<ul class="fulcrum-activity-list fulcrum-next-up-list">
-					{#each nextUpItems as item}
-						<li>
-							{#if item.kind === "task" && item.task}
-								<TaskCard
-									plugin={plugin}
-									task={item.task}
-									done={false}
-									showProjectLink={false}
-									showTimelineIcon={true}
-								/>
-							{:else if item.kind === "note" && item.note}
-								<ActivityRow
-									variant="icon"
-									title={item.note.entryTitle}
-									chips={noteChipsNext(item.note)}
-									kind="note"
-									whenClick={() => item.note && openPath(item.note.file.path)}
-									{plugin}
-									hoverParentLeaf={hoverParentLeaf}
-									hoverPath={item.note.file.path}
-								/>
-							{/if}
-						</li>
-					{/each}
-				</ul>
+				{#if nextUpMeetings.length > 0}
+					<div class="fulcrum-next-up-meetings-row" role="list" aria-label="Upcoming meetings">
+						{#each nextUpMeetings as m (m.file.path)}
+							<div class="fulcrum-next-up-meetings-row__cell" role="listitem">
+								<NextUpMeetingCard meeting={m} onOpen={openPath} />
+							</div>
+						{/each}
+					</div>
+				{/if}
+				{#if nextUpListItems.length > 0}
+					<ul
+						class="fulcrum-activity-list fulcrum-next-up-list"
+						class:fulcrum-next-up-list--with-meetings-above={nextUpMeetings.length > 0}
+					>
+						{#each nextUpListItems as item}
+							<li>
+								{#if item.kind === "task" && item.task}
+									<TaskCard
+										plugin={plugin}
+										task={item.task}
+										done={false}
+										showProjectLink={false}
+										showTimelineIcon={true}
+									/>
+								{:else if item.kind === "note" && item.note}
+									<ActivityRow
+										variant="icon"
+										title={item.note.entryTitle}
+										chips={noteChipsNext(item.note)}
+										kind="note"
+										whenClick={() => item.note && openPath(item.note.file.path)}
+										{plugin}
+										hoverParentLeaf={hoverParentLeaf}
+										hoverPath={item.note.file.path}
+									/>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			{/if}
 		</section>
 

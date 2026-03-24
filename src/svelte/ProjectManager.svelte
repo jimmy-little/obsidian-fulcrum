@@ -5,17 +5,19 @@
 	import DashboardMain from "./DashboardMain.svelte";
 	import KanbanMain from "./KanbanMain.svelte";
 	import CalendarMain from "./CalendarMain.svelte";
+	import TimeTrackedMain from "./TimeTrackedMain.svelte";
 	import ProjectListPanel from "./ProjectListPanel.svelte";
 	import ProjectSummary from "./ProjectSummary.svelte";
 
 	export let plugin: FulcrumHost;
 	export let hoverParentLeaf: WorkspaceLeaf;
-	export let mainMode: "dashboard" | "project" | "kanban" | "calendar";
+	export let mainMode: "dashboard" | "project" | "kanban" | "calendar" | "time";
 	export let projectPath: string | null;
 	export let onSelectDashboard: () => void;
 	export let onSelectProject: (path: string) => void;
 	export let onSelectKanban: () => void;
 	export let onSelectCalendar: () => void;
+	export let onSelectTime: () => void;
 
 	const PM_LEFT_WIDTH_LS = "fulcrum-pm-left-col-px";
 	const PM_LEFT_MIN = 200;
@@ -40,12 +42,16 @@
 	let leftWidthPx: number | null = readStoredLeftWidth();
 	let dashboardBtnEl: HTMLButtonElement | null = null;
 	let kanbanBtnEl: HTMLButtonElement | null = null;
+	let timeBtnEl: HTMLButtonElement | null = null;
 
 	$: if (dashboardBtnEl && plugin) {
 		setIcon(dashboardBtnEl, "layout-dashboard");
 	}
 	$: if (kanbanBtnEl && plugin) {
 		setIcon(kanbanBtnEl, "columns-3");
+	}
+	$: if (timeBtnEl && plugin) {
+		setIcon(timeBtnEl, "clock");
 	}
 
 	$: selectedProjectPath = mainMode === "project" ? projectPath : null;
@@ -165,6 +171,15 @@
 				>
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
 				</button>
+				<button
+					type="button"
+					class="fulcrum-pm__glyph-btn clickable-icon"
+					class:fulcrum-pm__glyph-btn--active={mainMode === "time"}
+					aria-label="Time tracked"
+					title="Time tracked"
+					bind:this={timeBtnEl}
+					on:click={onSelectTime}
+				></button>
 			</div>
 			{#if !leftCollapsed}
 				<div class="fulcrum-pm__left-scroll">
@@ -195,7 +210,7 @@
 					Refresh
 				</button>
 			</header>
-			<DashboardMain {plugin} />
+			<DashboardMain {plugin} hoverParentLeaf={hoverParentLeaf} />
 		{:else if mainMode === "kanban"}
 			<header class="fulcrum-pm__main-head">
 				<h1 class="fulcrum-pm__main-title">Kanban</h1>
@@ -212,6 +227,14 @@
 				</button>
 			</header>
 			<CalendarMain {plugin} />
+		{:else if mainMode === "time"}
+			<header class="fulcrum-pm__main-head">
+				<h1 class="fulcrum-pm__main-title">Time tracked</h1>
+				<button type="button" class="mod-cta" on:click={() => void plugin.refreshIndex()}>
+					Refresh
+				</button>
+			</header>
+			<TimeTrackedMain {plugin} />
 		{:else if projectPath}
 			{#key projectPath}
 				<ProjectSummary {plugin} {projectPath} {hoverParentLeaf} />

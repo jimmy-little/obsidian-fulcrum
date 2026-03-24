@@ -1,8 +1,9 @@
 import type {ProjectLogActivityEntry} from "../projectNote";
 import type {AtomicNoteRow, IndexedMeeting, IndexedTask, ProjectRollup} from "../types";
-import {isISODateTodayOrFuture} from "./dates";
+import {formatShortMonthDay, isISODateTodayOrFuture} from "./dates";
+import {meetingEffectiveMinutes} from "./meetingEffectiveMinutes";
 
-export type ChipKind = "tag" | "date" | "type" | "tracked" | "status" | "misc";
+export type ChipKind = "tag" | "date" | "type" | "tracked" | "status" | "misc" | "project";
 
 export type ActivityChip = {
 	kind: ChipKind;
@@ -17,12 +18,28 @@ export type ActivityRowModel = {
 	chips: ActivityChip[];
 	open: () => void;
 	hoverPath?: string;
+	/** For aggregated feeds: project display name (e.g. "Project X"). */
+	projectName?: string;
+	/** For aggregated feeds: CSS color for timeline accent. */
+	accentColorCss?: string;
 };
 
 export type NextUpItem = {
 	kind: "task" | "note";
 	task?: IndexedTask;
 	note?: AtomicNoteRow;
+};
+
+type NextUpSortRow =
+	| {key: string; kind: "task"; task: IndexedTask}
+	| {key: string; kind: "note"; note: AtomicNoteRow}
+	| {key: string; kind: "meeting"; meeting: IndexedMeeting};
+
+export type NextUpSegments = {
+	/** Meetings with date today or later, sorted ascending (same pool as before, split for card UI). */
+	meetings: IndexedMeeting[];
+	/** Tasks and notes only, same sort order as within the combined next-up window. */
+	items: NextUpItem[];
 };
 
 /** Strip `[[…]]` wikilink syntax, returning the display text. */
@@ -61,11 +78,34 @@ function chipsForLog(e: ProjectLogActivityEntry): ActivityChip[] {
 function chipsForMeeting(m: IndexedMeeting, formatTracked: (n: number) => string): ActivityChip[] {
 	const c: ActivityChip[] = [];
 	if (m.date?.trim()) c.push({kind: "date", label: m.date.slice(0, 10)});
-	if (m.duration != null && Number.isFinite(m.duration)) c.push({kind: "tracked", label: `${m.duration}m`});
-	if (m.totalMinutesTracked != null && m.totalMinutesTracked > 0) {
-		c.push({kind: "tracked", label: formatTracked(m.totalMinutesTracked)});
-	}
+	const eff = meetingEffectiveMinutes(m);
+	if (eff > 0) c.push({kind: "tracked", label: formatTracked(eff)});
 	return c;
+}
+
+/** One-line when string for Next up meeting cards: weekday · date · time · duration. */
+export function formatNextUpMeetingWhen(m: IndexedMeeting): string {
+	const raw = m.date?.trim() ?? "";
+	if (!raw) return "";
+	const datePart = raw.slice(0, 10);
+	const noon = Date.parse(datePart + "T12:00:00");
+	const dayName = Number.isNaN(noon)
+		? ""
+		: new Intl.DateTimeFormat("en-US", {weekday: "short"}).format(noon);
+	const dateStr = formatShortMonthDay(datePart) || datePart;
+	let timePart = "";
+	if (raw.length > 10 && raw.includes("T")) {
+		const ms = Date.parse(raw);
+		if (!Number.isNaN(ms)) {
+			timePart = new Intl.DateTimeFormat("en-US", {
+				hour: "numeric",
+				minute: "2-digit",
+			}).format(ms);
+		}
+	}
+	const eff = meetingEffectiveMinutes(m);
+	const dur = eff > 0 ? `${eff} min` : "";
+	return [dayName, dateStr, timePart, dur].filter(Boolean).join(" · ");
 }
 
 export function sortMsForMeeting(m: IndexedMeeting): number {
@@ -95,28 +135,52 @@ export function taskIsComplete(t: IndexedTask, doneTask: Set<string>): boolean {
 	return doneTask.has(t.status) || Boolean(t.completedDate?.trim());
 }
 
+function meetingNextUpKey(m: IndexedMeeting): string | null {
+	if (!m.date?.trim()) return null;
+	const norm = m.date.trim().slice(0, 10);
+	if (norm.length < 10) return null;
+	if (!isISODateTodayOrFuture(m.date)) return null;
+	return norm;
+}
+
 /**
- * Next up: incomplete tasks with due or scheduled **today or later**, and notes whose primary date is **today or later** — ascending by that date.
+ * Next up: incomplete tasks (due or scheduled today+), notes (primary date today+), and meetings (date today+).
+ * Atomic notes whose file is already a linked meeting are omitted from `items` (shown only as meeting tiles).
+ * Sorted ascending by date key; capped at `limit` total rows, then split into meetings vs task/note items.
  */
-export function buildNextUpItems(
+export function buildNextUpSegments(
 	rollup: ProjectRollup,
 	doneTask: Set<string>,
 	limit = 8,
-): NextUpItem[] {
-	type Row = {key: string; item: NextUpItem};
-	const rows: Row[] = [];
+): NextUpSegments {
+	const meetingPaths = new Set(rollup.meetings.map((m) => m.file.path));
+	const rows: NextUpSortRow[] = [];
 	for (const t of rollup.tasks) {
 		if (doneTask.has(t.status) || t.completedDate?.trim()) continue;
 		const key = earliestTodayOrFutureDueOrSched(t);
 		if (key == null) continue;
-		rows.push({key, item: {kind: "task", task: t}});
+		rows.push({key, kind: "task", task: t});
 	}
 	for (const n of rollup.atomicNotes) {
+		if (meetingPaths.has(n.file.path)) continue;
 		if (!isISODateTodayOrFuture(n.dateSort)) continue;
-		rows.push({key: n.dateSort.slice(0, 10), item: {kind: "note", note: n}});
+		rows.push({key: n.dateSort.slice(0, 10), kind: "note", note: n});
+	}
+	for (const m of rollup.meetings) {
+		const key = meetingNextUpKey(m);
+		if (key == null) continue;
+		rows.push({key, kind: "meeting", meeting: m});
 	}
 	rows.sort((a, b) => a.key.localeCompare(b.key));
-	return rows.slice(0, limit).map((r) => r.item);
+	const sliced = rows.slice(0, limit);
+	const meetings: IndexedMeeting[] = [];
+	const items: NextUpItem[] = [];
+	for (const r of sliced) {
+		if (r.kind === "meeting") meetings.push(r.meeting);
+		else if (r.kind === "task") items.push({kind: "task", task: r.task});
+		else items.push({kind: "note", note: r.note});
+	}
+	return {meetings, items};
 }
 
 export function buildActivityRowModels(
@@ -176,6 +240,105 @@ export function buildActivityRowModels(
 			open: () => deps.openPath(deps.projectPath),
 		});
 	}
+	items.sort((a, b) => b.sortMs - a.sortMs);
+	return items;
+}
+
+export type ProjectActivityInput = {
+	rollup: ProjectRollup;
+	logEntries: ProjectLogActivityEntry[];
+};
+
+/**
+ * Build activity rows from all projects, sorted by time (newest first), limited to last 7 days.
+ * Each row includes project name chip (+ProjectName) and accent color for the timeline.
+ */
+export function buildAggregatedActivityRows(
+	inputs: ProjectActivityInput[],
+	deps: {
+		doneTask: Set<string>;
+		openPath: (path: string) => void;
+		openTask: (t: IndexedTask) => void;
+		openProject: (path: string) => void;
+		formatTracked: (n: number) => string;
+		lastNDaysMs: number;
+	},
+): ActivityRowModel[] {
+	const items: ActivityRowModel[] = [];
+	const cutoffMs = Date.now() - deps.lastNDaysMs;
+
+	for (const {rollup, logEntries} of inputs) {
+		const projectPath = rollup.project.file.path;
+		const projectName = rollup.project.name;
+		const accentColorCss = rollup.accentColorCss;
+
+		const addProjectChip = (chips: ActivityChip[]): ActivityChip[] => {
+			const out = [...chips];
+			out.unshift({kind: "project", label: `+${projectName}`});
+			return out;
+		};
+
+		for (const n of rollup.atomicNotes) {
+			if (n.modifiedMs < cutoffMs) continue;
+			items.push({
+				id: `note:${n.file.path}`,
+				kind: "note",
+				sortMs: n.modifiedMs,
+				title: n.entryTitle,
+				chips: addProjectChip(chipsForNote(n, deps.formatTracked)),
+				open: () => deps.openPath(n.file.path),
+				hoverPath: n.file.path,
+				projectName,
+				accentColorCss,
+			});
+		}
+		for (const t of rollup.tasks) {
+			if (!taskIsComplete(t, deps.doneTask)) continue;
+			const mtime = t.file.stat.mtime;
+			if (mtime < cutoffMs) continue;
+			items.push({
+				id: `task:${t.file.path}:${t.line ?? 0}:${t.title.slice(0, 80)}`,
+				kind: "task",
+				sortMs: mtime,
+				title: t.title,
+				chips: addProjectChip(chipsForTask(t, deps.formatTracked)),
+				open: () => deps.openTask(t),
+				hoverPath: t.file.path,
+				projectName,
+				accentColorCss,
+			});
+		}
+		for (const m of rollup.meetings) {
+			const sortMs = sortMsForMeeting(m);
+			if (sortMs < cutoffMs) continue;
+			items.push({
+				id: `meeting:${m.file.path}`,
+				kind: "meeting",
+				sortMs,
+				title: m.title?.trim() || m.file.basename.replace(/\.md$/i, ""),
+				chips: addProjectChip(chipsForMeeting(m, deps.formatTracked)),
+				open: () => deps.openPath(m.file.path),
+				hoverPath: m.file.path,
+				projectName,
+				accentColorCss,
+			});
+		}
+		for (let i = 0; i < logEntries.length; i++) {
+			const e = logEntries[i]!;
+			if (e.sortMs < cutoffMs) continue;
+			items.push({
+				id: `log:${projectPath}:${e.sortMs}:${i}`,
+				kind: "log",
+				sortMs: e.sortMs,
+				title: e.title,
+				chips: addProjectChip(chipsForLog(e)),
+				open: () => deps.openProject(projectPath),
+				projectName,
+				accentColorCss,
+			});
+		}
+	}
+
 	items.sort((a, b) => b.sortMs - a.sortMs);
 	return items;
 }

@@ -21,6 +21,7 @@ import {
 	resolveProjectFileFromFm,
 } from "./utils/projectLink";
 import {readTrackedMinutesFromFm} from "./utils/trackedMinutes";
+import {meetingEffectiveMinutes, meetingHasPositiveTrackedMinutes} from "./utils/meetingEffectiveMinutes";
 import {resolveBannerImageSrc, resolveProjectAccentCss} from "./utils/projectVisual";
 import {bumpIndexRevision} from "./stores";
 import {fileMatchesFolderScope, parseFolderPathList} from "./utils/folderScopes";
@@ -41,6 +42,14 @@ function fmString(fm: Record<string, unknown> | undefined, key: string): string 
 	const v = fm[key];
 	if (typeof v === "string") return v;
 	if (typeof v === "number" || typeof v === "boolean") return String(v);
+	if (v instanceof Date && !Number.isNaN(v.getTime())) {
+		const y = v.getFullYear();
+		const m = String(v.getMonth() + 1).padStart(2, "0");
+		const d = String(v.getDate()).padStart(2, "0");
+		const h = String(v.getHours()).padStart(2, "0");
+		const min = String(v.getMinutes()).padStart(2, "0");
+		return `${y}-${m}-${d}T${h}:${min}`;
+	}
 	return undefined;
 }
 
@@ -223,13 +232,40 @@ export class VaultIndex {
 			}
 
 			if (inMeetings && fm) {
-				const durRaw = fm[s.meetingDurationField];
-				const duration =
-					typeof durRaw === "number"
-						? durRaw
-						: typeof durRaw === "string"
-							? Number.parseFloat(durRaw)
-							: undefined;
+				const dateFromStart =
+					s.meetingStartTimeField?.trim() &&
+					fmString(fm, s.meetingStartTimeField);
+				const dateRaw =
+					(dateFromStart && String(dateFromStart).trim()) ||
+					fmString(fm, s.meetingDateField) ||
+					undefined;
+
+				let duration: number | undefined;
+				const endRaw =
+					s.meetingEndTimeField?.trim() &&
+					fmString(fm, s.meetingEndTimeField);
+				const endStr =
+					(endRaw && String(endRaw).trim()) || undefined;
+				if (dateRaw && endStr) {
+					const startMs = Date.parse(dateRaw);
+					const endMs = Date.parse(endStr);
+					if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs > startMs) {
+						duration = Math.round((endMs - startMs) / 60000);
+					}
+				}
+				if (duration == null) {
+					const durRaw = fm[s.meetingDurationField];
+					duration =
+						typeof durRaw === "number"
+							? durRaw
+							: typeof durRaw === "string"
+								? Number.parseFloat(durRaw)
+								: undefined;
+				}
+				if (duration != null && !Number.isFinite(duration)) {
+					duration = undefined;
+				}
+
 				const tmRaw = fm[s.meetingTotalMinutesField];
 				const totalMinutesTracked =
 					typeof tmRaw === "number"
@@ -243,9 +279,9 @@ export class VaultIndex {
 					: null;
 				meetings.push({
 					file,
-					date: fmString(fm, s.meetingDateField),
+					date: dateRaw ?? undefined,
 					title: fmString(fm, s.meetingTitleField) ?? file.basename,
-					duration: Number.isFinite(duration) ? duration : undefined,
+					duration: duration != null && duration > 0 ? duration : undefined,
 					totalMinutesTracked: Number.isFinite(totalMinutesTracked)
 						? totalMinutesTracked
 						: undefined,
@@ -511,17 +547,11 @@ export class VaultIndex {
 
 		let meetingOnlyMinutes = 0;
 		for (const m of meetings) {
-			const dur =
-				m.duration != null && Number.isFinite(m.duration) ? m.duration : 0;
-			const trackedPresent =
-				m.totalMinutesTracked != null && Number.isFinite(m.totalMinutesTracked);
-			const tracked = trackedPresent ? m.totalMinutesTracked! : 0;
-			// Actual tracked time wins; duration is a pre-meeting estimate fallback only.
-			const meetingMinutes = trackedPresent ? tracked : dur;
+			const meetingMinutes = meetingEffectiveMinutes(m);
 
 			if (atomicPaths.has(m.file.path)) {
 				// Atomic row already summed readTrackedMinutesFromFm when keys align.
-				if (!trackedPresent) meetingOnlyMinutes += meetingMinutes;
+				if (!meetingHasPositiveTrackedMinutes(m)) meetingOnlyMinutes += meetingMinutes;
 			} else {
 				meetingOnlyMinutes += meetingMinutes;
 			}
