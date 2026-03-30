@@ -38,7 +38,17 @@ export interface FulcrumHost {
 	openNewInlineTaskForProject(projectPath: string): void;
 	/** TaskNotes “Create new task” with project pre-filled when the plugin exposes it. */
 	openTaskNoteCreateForProject(projectPath: string): void;
-	openIndexedTask(task: IndexedTask): void;
+	/** Create a note from the configured template; opens beside the project view when possible. */
+	createNewNoteFromTemplateForProject(
+		projectPath: string,
+		anchorLeaf?: WorkspaceLeaf,
+	): Promise<void>;
+	/**
+	 * Open a vault path for editing beside the Fulcrum leaf when possible (split right; reuse pane).
+	 * Falls back to a new tab without an anchor (e.g. mobile).
+	 */
+	openLinkedNoteFromFulcrum(path: string, anchorLeaf?: WorkspaceLeaf): void;
+	openIndexedTask(task: IndexedTask, anchorLeaf?: WorkspaceLeaf): void;
 	toggleIndexedTask(task: IndexedTask): Promise<void>;
 	patchSettings(partial: Partial<FulcrumSettings>): Promise<void>;
 	triggerFulcrumHoverLink(

@@ -18,6 +18,8 @@ export type ActivityRowModel = {
 	chips: ActivityChip[];
 	open: () => void;
 	hoverPath?: string;
+	/** Notes only: when the type (frontmatter) begins with an emoji, show it in the timeline circle. */
+	timelineEmoji?: string;
 	/** For aggregated feeds: project display name (e.g. "Project X"). */
 	projectName?: string;
 	/** For aggregated feeds: CSS color for timeline accent. */
@@ -45,6 +47,26 @@ export type NextUpSegments = {
 /** Strip `[[…]]` wikilink syntax, returning the display text. */
 function stripWikilinks(s: string): string {
 	return s.replace(/\[\[(?:[^\]|]+\|)?([^\]]+)\]\]/g, "$1");
+}
+
+/**
+ * If `noteType` (raw frontmatter / display form) starts with an emoji grapheme after wikilink
+ * stripping, returns that grapheme for the activity timeline node; otherwise `undefined`.
+ */
+export function leadingTimelineEmojiFromNoteType(noteType: string | undefined): string | undefined {
+	if (!noteType?.trim()) return undefined;
+	const display = stripWikilinks(noteType).trimStart();
+	if (!display) return undefined;
+	try {
+		const seg = new Intl.Segmenter(undefined, {granularity: "grapheme"});
+		const first = [...seg.segment(display)][0];
+		if (!first) return undefined;
+		const g = first.segment;
+		if (/\p{Extended_Pictographic}/u.test(g)) return g;
+		return undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 function chipsForNote(n: AtomicNoteRow, formatTracked: (n: number) => string): ActivityChip[] {
@@ -135,8 +157,36 @@ export function taskIsComplete(t: IndexedTask, doneTask: Set<string>): boolean {
 	return doneTask.has(t.status) || Boolean(t.completedDate?.trim());
 }
 
+/**
+ * Wall-clock end instant when we can derive it: explicit `endTime`, or `date` (datetime) + effective duration.
+ * Date-only meetings return null (calendar rules apply via {@link isISODateTodayOrFuture}).
+ */
+function meetingTimedEndMs(m: IndexedMeeting): number | null {
+	const endTrim = m.endTime?.trim();
+	if (endTrim) {
+		const t = Date.parse(endTrim);
+		if (!Number.isNaN(t)) return t;
+	}
+	const raw = m.date?.trim() ?? "";
+	if (!raw) return null;
+	const eff = meetingEffectiveMinutes(m);
+	if (eff <= 0) return null;
+	const hasTime = raw.length > 10 && raw.includes("T");
+	if (!hasTime) return null;
+	const startMs = Date.parse(raw);
+	if (Number.isNaN(startMs)) return null;
+	return startMs + eff * 60_000;
+}
+
+function meetingIsPastForNextUp(m: IndexedMeeting): boolean {
+	const endMs = meetingTimedEndMs(m);
+	if (endMs != null) return endMs < Date.now();
+	return false;
+}
+
 function meetingNextUpKey(m: IndexedMeeting): string | null {
 	if (!m.date?.trim()) return null;
+	if (meetingIsPastForNextUp(m)) return null;
 	const norm = m.date.trim().slice(0, 10);
 	if (norm.length < 10) return null;
 	if (!isISODateTodayOrFuture(m.date)) return null;
@@ -144,8 +194,9 @@ function meetingNextUpKey(m: IndexedMeeting): string | null {
 }
 
 /**
- * Next up: incomplete tasks (due or scheduled today+), notes (primary date today+), and meetings (date today+).
- * Atomic notes whose file is already a linked meeting are omitted from `items` (shown only as meeting tiles).
+ * Next up: incomplete tasks (due or scheduled today+), notes (primary date today+, no `endTime`), and meetings
+ * (date today+ and not already ended via `endTime` or start+duration). Atomic notes whose file is a linked meeting
+ * are omitted from `items` (shown only as meeting tiles).
  * Sorted ascending by date key; capped at `limit` total rows, then split into meetings vs task/note items.
  */
 export function buildNextUpSegments(
@@ -163,6 +214,7 @@ export function buildNextUpSegments(
 	}
 	for (const n of rollup.atomicNotes) {
 		if (meetingPaths.has(n.file.path)) continue;
+		if (n.endTime?.trim()) continue;
 		if (!isISODateTodayOrFuture(n.dateSort)) continue;
 		rows.push({key: n.dateSort.slice(0, 10), kind: "note", note: n});
 	}
@@ -181,6 +233,42 @@ export function buildNextUpSegments(
 		else items.push({kind: "note", note: r.note});
 	}
 	return {meetings, items};
+}
+
+/**
+ * “Next up” for an area aggregate: open tasks with due/scheduled today+ and meetings today+.
+ * Same card/list split as {@link buildNextUpSegments}, without atomic notes.
+ */
+export function buildAreaNextUpSegments(
+	tasks: IndexedTask[],
+	meetings: IndexedMeeting[],
+	doneTask: Set<string>,
+	limit = 12,
+): NextUpSegments {
+	const rows: Array<
+		| {key: string; kind: "task"; task: IndexedTask}
+		| {key: string; kind: "meeting"; meeting: IndexedMeeting}
+	> = [];
+	for (const t of tasks) {
+		if (doneTask.has(t.status) || t.completedDate?.trim()) continue;
+		const key = earliestTodayOrFutureDueOrSched(t);
+		if (key == null) continue;
+		rows.push({key, kind: "task", task: t});
+	}
+	for (const m of meetings) {
+		const key = meetingNextUpKey(m);
+		if (key == null) continue;
+		rows.push({key, kind: "meeting", meeting: m});
+	}
+	rows.sort((a, b) => a.key.localeCompare(b.key));
+	const sliced = rows.slice(0, limit);
+	const outMeetings: IndexedMeeting[] = [];
+	const items: NextUpItem[] = [];
+	for (const r of sliced) {
+		if (r.kind === "meeting") outMeetings.push(r.meeting);
+		else items.push({kind: "task", task: r.task});
+	}
+	return {meetings: outMeetings, items};
 }
 
 export function buildActivityRowModels(
@@ -204,6 +292,7 @@ export function buildActivityRowModels(
 			chips: chipsForNote(n, deps.formatTracked),
 			open: () => deps.openPath(n.file.path),
 			hoverPath: n.file.path,
+			timelineEmoji: leadingTimelineEmojiFromNoteType(n.noteType),
 		});
 	}
 	for (const t of rollup.tasks) {
@@ -288,6 +377,7 @@ export function buildAggregatedActivityRows(
 				chips: addProjectChip(chipsForNote(n, deps.formatTracked)),
 				open: () => deps.openPath(n.file.path),
 				hoverPath: n.file.path,
+				timelineEmoji: leadingTimelineEmojiFromNoteType(n.noteType),
 				projectName,
 				accentColorCss,
 			});

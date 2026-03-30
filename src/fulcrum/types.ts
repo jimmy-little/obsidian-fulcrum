@@ -7,6 +7,8 @@ export interface IndexedArea {
 	color?: string;
 	icon?: string;
 	description?: string;
+	/** From area note frontmatter `work-related` / `workRelated`. */
+	workRelated?: boolean;
 }
 
 export interface IndexedProject {
@@ -17,8 +19,11 @@ export interface IndexedProject {
 	startDate?: string;
 	dueDate?: string;
 	completedDate?: string;
+	/** Primary area (first linked); same as areaFiles[0] when non-empty. */
 	areaFile: TFile | null;
 	areaName?: string;
+	/** All area notes from the configured area field (multi-area projects). */
+	areaFiles: TFile[];
 	/** Raw frontmatter (wikilink, URL, or path) for banner image. */
 	banner?: string;
 	/** Raw frontmatter color token or CSS color. */
@@ -41,6 +46,11 @@ export interface IndexedTask {
 	dueDate?: string;
 	scheduledDate?: string;
 	completedDate?: string;
+	/** When the task was actually done (calendar prefers this over scheduled). */
+	startTime?: string;
+	endTime?: string;
+	/** Planned length in minutes from frontmatter `duration` (calendar block height). */
+	durationMinutes?: number;
 	projectFile: TFile | null;
 	areaFile: TFile | null;
 	tags: string[];
@@ -54,6 +64,8 @@ export interface IndexedTask {
 export interface IndexedMeeting {
 	file: TFile;
 	date?: string;
+	/** Explicit end datetime from frontmatter when configured (meeting end field). */
+	endTime?: string;
 	title?: string;
 	duration?: number;
 	totalMinutesTracked?: number;
@@ -74,6 +86,8 @@ export interface AtomicNoteRow {
 	priority?: string;
 	/** Vault file mtime for activity ordering (newest-first feeds). */
 	modifiedMs: number;
+	/** When set, time tracking is closed for this note — exclude from Next up. */
+	endTime?: string;
 }
 
 export interface IndexedPerson {

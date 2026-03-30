@@ -13,7 +13,7 @@ import type {
 } from "./types";
 import {isUnderFolder, projectStatusFromSubfolderLayout} from "./utils/paths";
 import {formatShortMonthDay, isOverdue} from "./utils/dates";
-import {parseWikiLink} from "./utils/wikilinks";
+import {parseAreaLinkPaths, parseWikiLink} from "./utils/wikilinks";
 import {parseFolderPrefixList, isUnderAtomicPrefixes} from "./utils/atomicFolders";
 import {
 	fileLinksToProject,
@@ -62,6 +62,25 @@ function fmNumber(fm: Record<string, unknown> | undefined, key: string): number 
 		if (!t) return undefined;
 		const n = Number.parseFloat(t);
 		return Number.isFinite(n) ? n : undefined;
+	}
+	return undefined;
+}
+
+/** First matching key wins. `true` / `false` or common string forms. */
+function fmBooleanLoose(
+	fm: Record<string, unknown> | undefined,
+	keys: string[],
+): boolean | undefined {
+	if (!fm) return undefined;
+	for (const key of keys) {
+		const v = fm[key];
+		if (v === true) return true;
+		if (v === false) return false;
+		if (typeof v === "string") {
+			const s = v.trim().toLowerCase();
+			if (s === "true" || s === "yes" || s === "1") return true;
+			if (s === "false" || s === "no" || s === "0") return false;
+		}
 	}
 	return undefined;
 }
@@ -184,6 +203,7 @@ export class VaultIndex {
 			const projectTypeLc = s.projectTypeValue.toLowerCase();
 
 			if (inAP && fm && tVal === areaTypeLc) {
+				const wr = fmBooleanLoose(fm, ["work-related", "workRelated"]);
 				areas.push({
 					file,
 					name: fmString(fm, "name") ?? file.basename,
@@ -191,6 +211,7 @@ export class VaultIndex {
 					color: fmString(fm, "color"),
 					icon: fmString(fm, "icon"),
 					description: fmString(fm, "description"),
+					workRelated: wr === true ? true : wr === false ? false : undefined,
 				});
 				continue;
 			}
@@ -199,10 +220,16 @@ export class VaultIndex {
 			const isInferredProject =
 				s.inferProjectsInAreasFolder && tVal !== areaTypeLc;
 			if (inAP && fm && (isExplicitProject || isInferredProject)) {
-				const areaLink = parseWikiLink(fm[s.areaLinkField]);
-				const areaFile = areaLink
-					? this.app.metadataCache.getFirstLinkpathDest(areaLink, file.path)
-					: null;
+				const areaFilesResolved: TFile[] = [];
+				const seenAreaPath = new Set<string>();
+				for (const link of parseAreaLinkPaths(fm[s.areaLinkField])) {
+					const dest = this.app.metadataCache.getFirstLinkpathDest(link, file.path);
+					if (dest && !seenAreaPath.has(dest.path)) {
+						seenAreaPath.add(dest.path);
+						areaFilesResolved.push(dest);
+					}
+				}
+				const areaFile = areaFilesResolved[0] ?? null;
 				const statusRaw =
 					s.projectStatusIndication === "subfolder"
 						? projectStatusFromSubfolderLayout(path, apRoot)
@@ -221,6 +248,7 @@ export class VaultIndex {
 					completedDate: fmString(fm, "completedDate"),
 					areaFile,
 					areaName: areaFile?.basename.replace(/\.md$/i, ""),
+					areaFiles: areaFilesResolved,
 					banner: fmString(fm, s.projectBannerField),
 					color: fmString(fm, s.projectColorField),
 					description: fmString(fm, "description"),
@@ -280,6 +308,7 @@ export class VaultIndex {
 				meetings.push({
 					file,
 					date: dateRaw ?? undefined,
+					endTime: endStr,
 					title: fmString(fm, s.meetingTitleField) ?? file.basename,
 					duration: duration != null && duration > 0 ? duration : undefined,
 					totalMinutesTracked: Number.isFinite(totalMinutesTracked)
@@ -331,6 +360,12 @@ export class VaultIndex {
 					fmString(fm, s.taskDueDateField) || fmString(fm, "due");
 				const sched =
 					fmString(fm, s.taskScheduledDateField) ?? fmString(fm, "scheduled");
+				const startKey = s.taskStartTimeField?.trim() || "startTime";
+				const endKey = s.taskEndTimeField?.trim() || "endTime";
+				const durKey = s.taskDurationField?.trim() || "duration";
+				const startTimeRaw = fmString(fm, startKey)?.trim();
+				const endTimeRaw = fmString(fm, endKey)?.trim();
+				const durN = fmNumber(fm, durKey);
 				tasks.push({
 					file,
 					title: fmString(fm, s.taskTitleField) ?? file.basename,
@@ -339,6 +374,10 @@ export class VaultIndex {
 					dueDate: due,
 					scheduledDate: sched,
 					completedDate: fmString(fm, s.taskCompletedDateField),
+					startTime: startTimeRaw || undefined,
+					endTime: endTimeRaw || undefined,
+					durationMinutes:
+						durN != null && Number.isFinite(durN) && durN > 0 ? Math.round(durN) : undefined,
 					projectFile,
 					areaFile,
 					tags: parseTagsFromFm(fm),
@@ -386,6 +425,12 @@ export class VaultIndex {
 					}
 					if (!proj) continue;
 					const isChecked = item.task === "x" || item.task === "X";
+					const startKey = s.taskStartTimeField?.trim() || "startTime";
+					const endKey = s.taskEndTimeField?.trim() || "endTime";
+					const durKey = s.taskDurationField?.trim() || "duration";
+					const startTimeRaw = fmString(fm, startKey)?.trim();
+					const endTimeRaw = fmString(fm, endKey)?.trim();
+					const durN = fmNumber(fm, durKey);
 					tasks.push({
 						file,
 						title: titleEmoji,
@@ -393,6 +438,10 @@ export class VaultIndex {
 						dueDate: dueEm,
 						scheduledDate: schedEm,
 						completedDate: undefined,
+						startTime: startTimeRaw || undefined,
+						endTime: endTimeRaw || undefined,
+						durationMinutes:
+							durN != null && Number.isFinite(durN) && durN > 0 ? Math.round(durN) : undefined,
 						projectFile: proj,
 						areaFile,
 						tags: [],
@@ -477,6 +526,7 @@ export class VaultIndex {
 			});
 			const noteType = resolveNoteType(body, fmString(fm, typeField));
 			const bodyPreview = buildNoteBodyPreview(body, entryTitle, entryKey);
+			const endTimeRaw = fmString(fm, "endTime")?.trim();
 			atomicRows.push({
 				file: f,
 				status: fmString(fm, s.taskStatusField) ?? fmString(fm, "status"),
@@ -489,6 +539,7 @@ export class VaultIndex {
 				tags: parseTagsFromFm(fm),
 				priority: fmString(fm, s.taskPriorityField)?.toLowerCase(),
 				modifiedMs: f.stat.mtime,
+				endTime: endTimeRaw || undefined,
 			});
 		}
 
@@ -607,6 +658,8 @@ export class VaultIndex {
 	}
 
 	projectsForArea(areaFile: TFile): IndexedProject[] {
-		return this.snapshot.projects.filter((p) => p.areaFile?.path === areaFile.path);
+		return this.snapshot.projects.filter((p) =>
+			p.areaFiles.some((a) => a.path === areaFile.path),
+		);
 	}
 }

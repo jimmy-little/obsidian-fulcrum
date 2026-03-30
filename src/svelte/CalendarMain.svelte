@@ -1,7 +1,13 @@
 <script lang="ts">
+	import type {WorkspaceLeaf} from "obsidian";
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import type {IndexedMeeting, IndexedTask} from "../fulcrum/types";
-	import {indexRevision, settingsRevision} from "../fulcrum/stores";
+	import {indexRevision, settingsRevision, workRelatedOnly} from "../fulcrum/stores";
+	import {
+		buildAreaWorkRelatedMap,
+		meetingPassesWorkFilter,
+		taskPassesWorkFilter,
+	} from "../fulcrum/utils/workRelatedProjectFilter";
 	import {parseList} from "../fulcrum/settingsDefaults";
 	import {
 		gridDates,
@@ -24,6 +30,7 @@
 	} from "../fulcrum/utils/calendarEvents";
 	import {resolveProjectAccentCss} from "../fulcrum/utils/projectVisual";
 	export let plugin: FulcrumHost;
+	export let hoverParentLeaf: WorkspaceLeaf | undefined = undefined;
 
 	let focalDate = new Date();
 	focalDate.setHours(0, 0, 0, 0);
@@ -39,6 +46,9 @@
 	$: viewMode = (void sRev, plugin.settings.calendarViewMode) as CalendarViewMode;
 	$: doneTask = new Set(parseList(plugin.settings.taskDoneStatuses));
 
+	$: areaWorkMap = buildAreaWorkRelatedMap(snapshot.areas);
+	$: onlyWork = $workRelatedOnly;
+
 	$: dates = gridDates(focalDate, viewMode);
 	$: startDate = gridStartDate(focalDate, viewMode);
 	$: dayCount = daysInView(viewMode);
@@ -47,7 +57,11 @@
 	$: datedTasks = snapshot.tasks.filter((t) => {
 		const sched = t.scheduledDate?.slice(0, 10);
 		const due = t.dueDate?.slice(0, 10);
-		return (sched || due) && !doneTask.has(t.status);
+		return (
+			(sched || due) &&
+			!doneTask.has(t.status) &&
+			taskPassesWorkFilter(t, snapshot, onlyWork, areaWorkMap)
+		);
 	});
 
 	$: projectColors = projectColorMap(snapshot.projects);
@@ -56,17 +70,19 @@
 	$: allCalendarEvents = ((): CalendarEvent[] => {
 		const out: CalendarEvent[] = [];
 		for (const t of datedTasks) {
-			for (const e of taskToCalendarEvent(t, () => plugin.openIndexedTask(t), projectColors)) {
+			for (const e of taskToCalendarEvent(
+				t,
+				() => plugin.openIndexedTask(t, hoverParentLeaf),
+				projectColors,
+			)) {
 				out.push(e);
 			}
 		}
 		for (const m of snapshot.meetings) {
+			if (!meetingPassesWorkFilter(m, snapshot, onlyWork, areaWorkMap)) continue;
 			const e = meetingToCalendarEvent(
 				m,
-				() => {
-					const f = plugin.app.vault.getAbstractFileByPath(m.file.path);
-					if (f && "extension" in f) void plugin.app.workspace.getLeaf("tab").openFile(f);
-				},
+				() => plugin.openLinkedNoteFromFulcrum(m.file.path, hoverParentLeaf),
 				projectColors,
 			);
 			if (e) out.push(e);
@@ -110,6 +126,7 @@
 	$: meetingsByDate = (() => {
 		const m = new Map<string, IndexedMeeting[]>();
 		for (const mt of snapshot.meetings) {
+			if (!meetingPassesWorkFilter(mt, snapshot, onlyWork, areaWorkMap)) continue;
 			const key = mt.date?.slice(0, 10) ?? "";
 			if (!key) continue;
 			const cur = m.get(key) ?? [];
@@ -243,7 +260,7 @@
 												data-task-path={t.file.path}
 												data-task-line={t.line ?? ""}
 												data-draggable-placeholder=""
-												on:click={() => plugin.openIndexedTask(t)}
+												on:click={() => plugin.openIndexedTask(t, hoverParentLeaf)}
 											>
 												<span class="fulcrum-calendar__event-icon" aria-hidden="true">
 													<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -260,10 +277,7 @@
 												data-fulcrum-calendar-event
 												data-meeting-path={m.file.path}
 												data-draggable-placeholder=""
-												on:click={() => {
-													const f = plugin.app.vault.getAbstractFileByPath(m.file.path);
-													if (f && "extension" in f) void plugin.app.workspace.getLeaf("tab").openFile(f);
-												}}
+												on:click={() => plugin.openLinkedNoteFromFulcrum(m.file.path, hoverParentLeaf)}
 											>
 												<span class="fulcrum-calendar__event-icon" aria-hidden="true">
 													<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>

@@ -64,6 +64,10 @@ export class ProjectView extends ItemView {
 				plugin: this.host,
 				projectPath: this.projectPath,
 				hoverParentLeaf: this.leaf,
+				onBackFromProject: () => {
+					void this.host.openDashboard();
+				},
+				backTargetLabel: "Dashboard",
 			},
 		});
 	}

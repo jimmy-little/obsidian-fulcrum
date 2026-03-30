@@ -52,6 +52,9 @@ export function sortIndexedProjects(
 			c = compareDates(a, b, "launchDate", dir);
 		} else if (sortBy === "nextReview") {
 			c = compareDates(a, b, "nextReview", dir);
+		} else if (sortBy === "name") {
+			c = a.name.localeCompare(b.name, undefined, {sensitivity: "base"});
+			if (dir === "desc") c = -c;
 		} else {
 			c = compareRank(a, b, dir);
 		}

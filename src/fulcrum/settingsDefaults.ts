@@ -1,10 +1,13 @@
 export type TaskSourceMode = "taskNotes" | "obsidianTasks" | "both";
 export type ProjectStatusIndication = "frontmatter" | "subfolder";
-export type ProjectSidebarSortBy = "launch" | "nextReview" | "rank";
+export type ProjectSidebarSortBy = "launch" | "nextReview" | "rank" | "name";
 export type ProjectSidebarSortDir = "asc" | "desc";
 
 /** Saved time-tracked dashboard range. */
 export type TimeTrackerHorizon = "all" | "7d" | "30d" | "90d";
+
+/** Where “new note from template” saves relative to the project. */
+export type ProjectNewNoteDestinationMode = "projectFolder" | "customPath";
 
 export interface FulcrumSettings {
 	areasProjectsFolder: string;
@@ -22,6 +25,11 @@ export interface FulcrumSettings {
 	taskPriorityField: string;
 	taskDueDateField: string;
 	taskScheduledDateField: string;
+	/** Actual work window on the task note; calendar uses before scheduled. */
+	taskStartTimeField: string;
+	taskEndTimeField: string;
+	/** Planned duration (minutes) for timed calendar blocks when scheduled has a time. */
+	taskDurationField: string;
 	taskCompletedDateField: string;
 	taskTrackedMinutesField: string;
 	taskTitleField: string;
@@ -70,7 +78,7 @@ export interface FulcrumSettings {
 	showRibbonIcon: boolean;
 	dateDisplayFormat: string;
 	completionThresholdPercent: number;
-	dashboardActiveProjectsGroupBy: "area" | "status";
+	dashboardActiveProjectsGroupBy: "area" | "status" | "none";
 	projectSidebarSortBy: ProjectSidebarSortBy;
 	projectSidebarSortDir: ProjectSidebarSortDir;
 	/** Project sidebar filter: unchecked status keys (empty = all checked). Use __none__ for no status. */
@@ -98,6 +106,14 @@ export interface FulcrumSettings {
 	/** Markdown heading Fulcrum creates/uses when appending log lines to the project file. */
 	projectLogSectionHeading: string;
 	projectLogPreviewMaxLines: number;
+
+	/** Vault path to a markdown note used as the body template for “New note” on project pages. Empty hides the button. */
+	projectNewNoteTemplatePath: string;
+	projectNewNoteDestinationMode: ProjectNewNoteDestinationMode;
+	/** When mode is customPath: vault folder; supports {{fulcrum_project}}, {{fulcrum_project_slug}}, {{fulcrum_project_link}}, {{fulcrum_project_path}}, {{date:…}}. */
+	projectNewNoteDestinationCustomPath: string;
+	/** New file name pattern (vault-relative file name only); same placeholders as custom path. */
+	projectNewNoteFileNamePattern: string;
 
 	projectBannerField: string;
 	projectColorField: string;
@@ -136,8 +152,11 @@ export const DEFAULT_SETTINGS: FulcrumSettings = {
 	taskPriorityField: "priority",
 	taskDueDateField: "dueDate",
 	taskScheduledDateField: "scheduled",
+	taskStartTimeField: "startTime",
+	taskEndTimeField: "endTime",
+	taskDurationField: "duration",
 	taskCompletedDateField: "completedDate",
-	taskTrackedMinutesField: "totalMinutesTracked",
+	taskTrackedMinutesField: "totalTimeTracked",
 	taskTitleField: "title",
 	taskNoteYamlStatusOpen: "NONE",
 	taskNoteYamlStatusDone: "DONE",
@@ -198,6 +217,11 @@ export const DEFAULT_SETTINGS: FulcrumSettings = {
 	atomicNoteEntryField: "entry",
 	projectLogSectionHeading: "## Fulcrum log",
 	projectLogPreviewMaxLines: 12,
+
+	projectNewNoteTemplatePath: "",
+	projectNewNoteDestinationMode: "projectFolder",
+	projectNewNoteDestinationCustomPath: "",
+	projectNewNoteFileNamePattern: "{{date:YYYY-MM-DD}}-{{fulcrum_project_slug}}.md",
 
 	projectBannerField: "banner",
 	projectColorField: "color",

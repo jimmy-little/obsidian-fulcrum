@@ -77,6 +77,12 @@ export class FulcrumSettingTab extends PluginSettingTab {
 		this.textSetting("taskPriorityField", "Task / project priority field");
 		this.textSetting("taskDueDateField", "Task due date field");
 		this.textSetting("taskScheduledDateField", "Task scheduled date field");
+		this.textSetting("taskStartTimeField", "Task actual start time field");
+		this.textSetting("taskEndTimeField", "Task actual end time field");
+		this.textSetting(
+			"taskDurationField",
+			"Task duration field (minutes, for calendar block height)",
+		);
 		this.textSetting("taskCompletedDateField", "Task completed date field");
 		this.textSetting("taskTrackedMinutesField", "Task tracked minutes field");
 		this.textSetting("taskTitleField", "Task title field");
@@ -299,6 +305,67 @@ export class FulcrumSettingTab extends PluginSettingTab {
 					}),
 			);
 
+		new Setting(containerEl)
+			.setName("New note from template — template path")
+			.setDesc(
+				"Vault path to a markdown note whose contents are copied for each new note. Leave empty to hide “New note” on project pages. Templater or core template syntax in the file is left as-is for those plugins to process after open.",
+			)
+			.addText((t) =>
+				t
+					.setPlaceholder("e.g. Templates/Project scratchpad.md")
+					.setValue(this.plugin.settings.projectNewNoteTemplatePath)
+					.onChange(async (v) => {
+						this.plugin.settings.projectNewNoteTemplatePath = v;
+						await this.plugin.saveSettings();
+					}),
+			);
+		new Setting(containerEl)
+			.setName("New note from template — destination")
+			.setDesc(
+				"Custom folder may use {{fulcrum_project}}, {{fulcrum_project_slug}}, {{fulcrum_project_link}}, {{fulcrum_project_path}}, and {{date:YYYY-MM-DD}} style tokens.",
+			)
+			.addDropdown((d) =>
+				d
+					.addOptions({
+						projectFolder: "Same folder as the project note",
+						customPath: "Custom folder path",
+					})
+					.setValue(this.plugin.settings.projectNewNoteDestinationMode)
+					.onChange(async (v) => {
+						this.plugin.settings.projectNewNoteDestinationMode = v as FulcrumSettings["projectNewNoteDestinationMode"];
+						await this.plugin.saveSettings();
+						this.display();
+					}),
+			);
+		if (this.plugin.settings.projectNewNoteDestinationMode === "customPath") {
+			new Setting(containerEl)
+				.setName("New note — custom folder path")
+				.setDesc("Vault-relative folder only (no filename). Created if missing.")
+				.addText((t) =>
+					t
+						.setPlaceholder("e.g. 40 Projects/{{fulcrum_project_slug}}/Notes")
+						.setValue(this.plugin.settings.projectNewNoteDestinationCustomPath)
+						.onChange(async (v) => {
+							this.plugin.settings.projectNewNoteDestinationCustomPath = v;
+							await this.plugin.saveSettings();
+						}),
+				);
+		}
+		new Setting(containerEl)
+			.setName("New note — file name pattern")
+			.setDesc(
+				"File name only (not a path). Same placeholders as the custom folder. If the file exists, a numeric suffix is added before .md.",
+			)
+			.addText((t) =>
+				t
+					.setPlaceholder("{{date:YYYY-MM-DD}}-{{fulcrum_project_slug}}.md")
+					.setValue(this.plugin.settings.projectNewNoteFileNamePattern)
+					.onChange(async (v) => {
+						this.plugin.settings.projectNewNoteFileNamePattern = v;
+						await this.plugin.saveSettings();
+					}),
+			);
+
 		heading(containerEl, "Display");
 		new Setting(containerEl)
 			.setName("Global activity display (days)")
@@ -317,10 +384,12 @@ export class FulcrumSettingTab extends PluginSettingTab {
 			);
 		new Setting(containerEl)
 			.setName("Project list: group by")
-			.setDesc("Dashboard and Project Manager sidebar. You can also change grouping from the list header.")
+			.setDesc(
+				"Dashboard and Project Manager sidebar. None shows a single sorted list. You can also change grouping from the list header.",
+			)
 			.addDropdown((d) =>
 				d
-					.addOptions({area: "Area", status: "Status"})
+					.addOptions({area: "Area", status: "Status", none: "None"})
 					.setValue(this.plugin.settings.dashboardActiveProjectsGroupBy)
 					.onChange(async (v) => {
 						this.plugin.settings.dashboardActiveProjectsGroupBy = v as FulcrumSettings["dashboardActiveProjectsGroupBy"];
@@ -329,13 +398,16 @@ export class FulcrumSettingTab extends PluginSettingTab {
 			);
 		new Setting(containerEl)
 			.setName("Project list: sort by")
-			.setDesc("Order within each group (launch and next review use your project page date fields).")
+			.setDesc(
+				"Order within each group or the flat list (launch and next review use your project page date fields; name is alphabetical).",
+			)
 			.addDropdown((d) =>
 				d
 					.addOptions({
 						launch: "Launch date",
 						nextReview: "Next review",
 						rank: "Rank",
+						name: "Name",
 					})
 					.setValue(this.plugin.settings.projectSidebarSortBy)
 					.onChange(async (v) => {

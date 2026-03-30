@@ -11,7 +11,13 @@ import {
 	buildSnapshotMarkdown,
 	insertOrReplaceProjectSnapshot,
 } from "./fulcrum/projectArchive";
-import {FULCRUM_HOVER_SOURCE, VIEW_DASHBOARD, VIEW_PROJECT, VIEW_PROJECT_MANAGER} from "./fulcrum/constants";
+import {
+	FULCRUM_HOVER_SOURCE,
+	VIEW_DASHBOARD,
+	VIEW_PROJECT,
+	VIEW_PROJECT_MANAGER,
+	VIEW_TIMELINE,
+} from "./fulcrum/constants";
 import {
 	ChangeProjectStatusModal,
 	LinkMeetingModal,
@@ -24,23 +30,35 @@ import {
 import type {FulcrumHost} from "./fulcrum/pluginBridge";
 import {
 	openProjectSummaryLeaf,
+	revealOrCreateAreas,
 	revealOrCreateDashboard,
 	revealOrCreateTimeTracked,
+	revealOrCreateTimeline,
 } from "./fulcrum/openViews";
 import {DEFAULT_SETTINGS, type FulcrumSettings} from "./fulcrum/settingsDefaults";
 import {postTaskNotesToggleStatus} from "./fulcrum/taskNotesApi";
 import {toggleInlineTaskLine, toggleTaskNoteFrontmatter} from "./fulcrum/taskVaultToggle";
 import {bumpSettingsRevision} from "./fulcrum/stores";
 import type {IndexedTask} from "./fulcrum/types";
+import {registerCompanionDocChrome} from "./fulcrum/companionDocChrome";
+import {
+	registerInlinePeoplePills,
+	registerLivePreviewPeoplePillScan,
+} from "./fulcrum/inlinePeoplePills";
+import {openMarkdownBesideFulcrum, type FulcrumCompanionLeaf} from "./fulcrum/openBesideFulcrum";
+import {createNewNoteFromTemplateForProject as runCreateNewNoteFromTemplate} from "./fulcrum/projectNewNoteFromTemplate";
 import {VaultIndex} from "./fulcrum/VaultIndex";
 import {FulcrumSettingTab} from "./settings";
 import {DashboardView} from "./views/DashboardView";
 import {ProjectManagerView} from "./views/ProjectManagerView";
 import {ProjectView} from "./views/ProjectView";
+import {TimelineView} from "./views/TimelineView";
 
 export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 	settings: FulcrumSettings = DEFAULT_SETTINGS;
 	vaultIndex!: VaultIndex;
+	/** Reused markdown leaf for “open beside” from project / linked surfaces. */
+	private readonly fulcrumCompanionLeaf: FulcrumCompanionLeaf = {current: null};
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -49,6 +67,7 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 		this.registerView(VIEW_PROJECT_MANAGER, (leaf) => new ProjectManagerView(leaf, this));
 		this.registerView(VIEW_DASHBOARD, (leaf) => new DashboardView(leaf, this));
 		this.registerView(VIEW_PROJECT, (leaf) => new ProjectView(leaf, this));
+		this.registerView(VIEW_TIMELINE, (leaf) => new TimelineView(leaf, this));
 
 		this.registerHoverLinkSource(FULCRUM_HOVER_SOURCE, {
 			display: this.manifest.name,
@@ -102,6 +121,21 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 			void this.vaultIndex.rebuild();
 		}, 750);
 		this.register(() => window.clearTimeout(deferredRebuild));
+		this.register(() => {
+			this.fulcrumCompanionLeaf.current = null;
+		});
+
+		registerCompanionDocChrome(
+			{
+				app: this.app,
+				getSettings: () => this.settings,
+				registerEvent: (r) => this.registerEvent(r),
+			},
+			this.fulcrumCompanionLeaf,
+		);
+
+		registerInlinePeoplePills(this, () => this.settings);
+		registerLivePreviewPeoplePillScan(this, () => this.settings);
 
 		this.addSettingTab(new FulcrumSettingTab(this.app, this));
 
@@ -123,6 +157,20 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 			name: "Open time tracked",
 			callback: () => {
 				void this.openTimeTracked();
+			},
+		});
+		this.addCommand({
+			id: "open-areas",
+			name: "Open areas",
+			callback: () => {
+				void this.openAreas();
+			},
+		});
+		this.addCommand({
+			id: "open-timeline",
+			name: "Open timeline",
+			callback: () => {
+				void this.openTimeline();
 			},
 		});
 		this.addCommand({
@@ -209,14 +257,16 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 		}
 		if (
 			merged.dashboardActiveProjectsGroupBy !== "area" &&
-			merged.dashboardActiveProjectsGroupBy !== "status"
+			merged.dashboardActiveProjectsGroupBy !== "status" &&
+			merged.dashboardActiveProjectsGroupBy !== "none"
 		) {
 			merged.dashboardActiveProjectsGroupBy = DEFAULT_SETTINGS.dashboardActiveProjectsGroupBy;
 		}
 		if (
 			merged.projectSidebarSortBy !== "launch" &&
 			merged.projectSidebarSortBy !== "nextReview" &&
-			merged.projectSidebarSortBy !== "rank"
+			merged.projectSidebarSortBy !== "rank" &&
+			merged.projectSidebarSortBy !== "name"
 		) {
 			merged.projectSidebarSortBy = DEFAULT_SETTINGS.projectSidebarSortBy;
 		}
@@ -273,6 +323,23 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 			merged.timeTrackerExcludedAreaPaths = DEFAULT_SETTINGS.timeTrackerExcludedAreaPaths;
 		}
 
+		if (typeof merged.projectNewNoteTemplatePath !== "string") {
+			merged.projectNewNoteTemplatePath = DEFAULT_SETTINGS.projectNewNoteTemplatePath;
+		}
+		if (
+			merged.projectNewNoteDestinationMode !== "projectFolder" &&
+			merged.projectNewNoteDestinationMode !== "customPath"
+		) {
+			merged.projectNewNoteDestinationMode = DEFAULT_SETTINGS.projectNewNoteDestinationMode;
+		}
+		if (typeof merged.projectNewNoteDestinationCustomPath !== "string") {
+			merged.projectNewNoteDestinationCustomPath =
+				DEFAULT_SETTINGS.projectNewNoteDestinationCustomPath;
+		}
+		if (typeof merged.projectNewNoteFileNamePattern !== "string") {
+			merged.projectNewNoteFileNamePattern = DEFAULT_SETTINGS.projectNewNoteFileNamePattern;
+		}
+
 		this.settings = merged as FulcrumSettings;
 	}
 
@@ -286,19 +353,26 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 		bumpSettingsRevision();
 	}
 
-	openIndexedTask(task: IndexedTask): void {
+	openLinkedNoteFromFulcrum(path: string, anchorLeaf?: WorkspaceLeaf): void {
+		const f = this.app.vault.getAbstractFileByPath(path);
+		if (!(f instanceof TFile)) return;
+		void openMarkdownBesideFulcrum(this.app, anchorLeaf, f, this.fulcrumCompanionLeaf);
+	}
+
+	openIndexedTask(task: IndexedTask, anchorLeaf?: WorkspaceLeaf): void {
 		const f = this.app.vault.getAbstractFileByPath(task.file.path);
 		if (!(f instanceof TFile)) return;
-		const leaf = this.app.workspace.getLeaf("tab");
-		if (task.source === "inline" && task.line != null) {
-			void leaf.openFile(f, {
-				active: true,
-				state: {line: task.line},
-				eState: {line: task.line},
-			});
-		} else {
-			void leaf.openFile(f);
-		}
+		const lineState =
+			task.source === "inline" && task.line != null
+				? {state: {line: task.line} as Record<string, unknown>, eState: {line: task.line} as Record<string, unknown>}
+				: undefined;
+		void openMarkdownBesideFulcrum(
+			this.app,
+			anchorLeaf,
+			f,
+			this.fulcrumCompanionLeaf,
+			lineState,
+		);
 	}
 
 	async toggleIndexedTask(task: IndexedTask): Promise<void> {
@@ -357,6 +431,14 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 
 	async openTimeTracked(): Promise<void> {
 		await revealOrCreateTimeTracked(this.app, this.settings);
+	}
+
+	async openAreas(): Promise<void> {
+		await revealOrCreateAreas(this.app, this.settings);
+	}
+
+	async openTimeline(): Promise<void> {
+		await revealOrCreateTimeline(this.app, this.settings);
 	}
 
 	async openProjectSummary(path: string): Promise<void> {
@@ -513,6 +595,20 @@ export default class FulcrumPlugin extends Plugin implements FulcrumHost {
 			console.error(e);
 			new Notice("Could not update the project note.");
 		}
+	}
+
+	async createNewNoteFromTemplateForProject(
+		projectPath: string,
+		anchorLeaf?: WorkspaceLeaf,
+	): Promise<void> {
+		await runCreateNewNoteFromTemplate(
+			this.app,
+			this.settings,
+			this.vaultIndex,
+			projectPath,
+			this.fulcrumCompanionLeaf,
+			anchorLeaf,
+		);
 	}
 
 	openTaskNoteCreateForProject(projectPath: string): void {

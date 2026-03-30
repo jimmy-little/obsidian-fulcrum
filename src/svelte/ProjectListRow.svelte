@@ -12,8 +12,14 @@
 	export let tile = false;
 
 	function areaLabel(project: IndexedProject): string {
-		const t = project.areaName?.trim();
-		return t && t.length > 0 ? t : "—";
+		if (project.areaFiles.length === 0) return "—";
+		if (project.areaFiles.length === 1) {
+			const t = project.areaName?.trim();
+			return (
+				(t && t.length > 0 ? t : project.areaFiles[0]!.basename.replace(/\.md$/i, "")) || "—"
+			);
+		}
+		return project.areaFiles.map((f) => f.basename.replace(/\.md$/i, "")).join(", ");
 	}
 
 	function reviewIsOverdue(project: IndexedProject): boolean {

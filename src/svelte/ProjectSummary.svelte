@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type {WorkspaceLeaf} from "obsidian";
 	import {setIcon} from "obsidian";
+	import {onMount} from "svelte";
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import {indexRevision} from "../fulcrum/stores";
 	import {parseList} from "../fulcrum/settingsDefaults";
@@ -16,7 +17,9 @@
 		buildActivityRowModels,
 		buildNextUpSegments,
 		incompleteProjectTasks,
+		leadingTimelineEmojiFromNoteType,
 	} from "../fulcrum/utils/projectActivity";
+	import {getLapseApi, runLapseQuickStartForProject} from "../fulcrum/lapseIntegration";
 	import {preferLightForegroundOnAccentCss} from "../fulcrum/utils/projectVisual";
 	import type {ProjectLogActivityEntry} from "../fulcrum/projectNote";
 	import ActivityRow from "./ActivityRow.svelte";
@@ -26,6 +29,12 @@
 	export let plugin: FulcrumHost;
 	export let projectPath: string;
 	export let hoverParentLeaf: WorkspaceLeaf | undefined = undefined;
+	/** When set, show a back control (Project Manager shell exit or standalone “home”). */
+	export let onBackFromProject: (() => void) | undefined = undefined;
+	export let backTargetLabel = "Dashboard";
+
+	let backBtnIconEl: HTMLSpanElement | null = null;
+	$: if (backBtnIconEl && onBackFromProject) setIcon(backBtnIconEl, "arrow-left");
 
 	let rollup: ProjectRollup | null = null;
 	let rollupLoadId = 0;
@@ -71,10 +80,7 @@
 	$: colorReview = urgencyColorForDays(daysReview);
 
 	function openPath(path: string): void {
-		const f = plugin.app.vault.getAbstractFileByPath(path);
-		if (f && "extension" in f) {
-			void plugin.app.workspace.getLeaf("tab").openFile(f);
-		}
+		plugin.openLinkedNoteFromFulcrum(path, hoverParentLeaf);
 	}
 
 	function noteChipsNext(n: AtomicNoteRow): import("../fulcrum/utils/projectActivity").ActivityChip[] {
@@ -127,7 +133,7 @@
 				projectPath,
 				doneTask,
 				openPath,
-				openTask: (t) => plugin.openIndexedTask(t),
+				openTask: (t) => plugin.openIndexedTask(t, hoverParentLeaf),
 				formatTracked: formatTrackedMinutesShort,
 			})
 		: [];
@@ -186,6 +192,34 @@
 	$: taskSourceMode = plugin.settings.taskSourceMode;
 	$: showNewInlineTaskBtn = taskSourceMode === "obsidianTasks" || taskSourceMode === "both";
 	$: showNewTaskNoteBtn = taskSourceMode === "taskNotes" || taskSourceMode === "both";
+	$: showNewNoteFromTemplateBtn = plugin.settings.projectNewNoteTemplatePath.trim().length > 0;
+
+	let lapseApiAvailable = !!getLapseApi(plugin.app);
+	let lapseBtnEl: HTMLButtonElement | null = null;
+
+	$: if (lapseBtnEl && lapseApiAvailable) setIcon(lapseBtnEl, "play");
+
+	onMount(() => {
+		const sync = (): void => {
+			lapseApiAvailable = !!getLapseApi(plugin.app);
+		};
+		sync();
+		window.addEventListener("lapse-tracker:public-api-ready", sync);
+		window.addEventListener("lapse-tracker:public-api-unload", sync);
+		return () => {
+			window.removeEventListener("lapse-tracker:public-api-ready", sync);
+			window.removeEventListener("lapse-tracker:public-api-unload", sync);
+		};
+	});
+
+	function startLapseTimer(): void {
+		if (!rollup) return;
+		void runLapseQuickStartForProject(
+			plugin.app,
+			rollup.project.name,
+			rollup.project.file.path,
+		);
+	}
 </script>
 
 {#if rollupMissing}
@@ -197,6 +231,19 @@
 		class="fulcrum-project"
 		style="--fulcrum-accent: {rollup.accentColorCss}; --fulcrum-cta-fg: {ctaFgOnAccent};"
 	>
+		{#if onBackFromProject}
+			<div class="fulcrum-project-back">
+				<button
+					type="button"
+					class="fulcrum-project-back__btn"
+					on:click={onBackFromProject}
+					aria-label="Back to {backTargetLabel}"
+				>
+					<span class="fulcrum-project-back__icon" bind:this={backBtnIconEl} aria-hidden="true"></span>
+					<span class="fulcrum-project-back__text">Back to {backTargetLabel}</span>
+				</button>
+			</div>
+		{/if}
 		<div
 			class="fulcrum-project-banner"
 			class:fulcrum-project-banner--image={bannerMode === "image"}
@@ -228,21 +275,44 @@
 						<div class="fulcrum-project-banner__actions">
 							<button
 								type="button"
-								class="fulcrum-banner-btn"
+								class="fulcrum-banner-btn fulcrum-banner-btn--full"
 								on:click={() => openPath(rollup.project.file.path)}
 							>
-								Open note
+								Open Note
 							</button>
-							<button
-								type="button"
-								class="fulcrum-banner-btn"
-								on:click={markReviewed}
-							>
-								Mark reviewed
-							</button>
-							<button type="button" class="fulcrum-banner-btn" on:click={markProjectComplete}>
-								Mark complete
-							</button>
+							<div class="fulcrum-banner-btn-row">
+								<button type="button" class="fulcrum-banner-btn fulcrum-banner-btn--half" on:click={markReviewed}>
+									Review
+								</button>
+								<button
+									type="button"
+									class="fulcrum-banner-btn fulcrum-banner-btn--half"
+									on:click={markProjectComplete}
+								>
+									Complete
+								</button>
+							</div>
+							<div class="fulcrum-banner-btn-row fulcrum-banner-btn-row--icons">
+								{#if lapseApiAvailable}
+									<button
+										type="button"
+										class="fulcrum-banner-btn fulcrum-banner-btn--half fulcrum-banner-btn--icon-only"
+										title="Start a Lapse timer (Quick Start) for this project"
+										aria-label="Start Lapse timer for this project"
+										bind:this={lapseBtnEl}
+										on:click={startLapseTimer}
+									></button>
+								{/if}
+								<button
+									type="button"
+									class="fulcrum-banner-btn fulcrum-banner-btn--half fulcrum-banner-btn--icon-only fulcrum-snapshot-btn"
+									class:fulcrum-banner-btn--icon-solo={!lapseApiAvailable}
+									title="Capture snapshot"
+									aria-label="Capture snapshot"
+									bind:this={snapshotBtnEl}
+									on:click={() => void captureSnapshot()}
+								></button>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -278,13 +348,6 @@
 							</a>
 						{/if}
 					</div>
-					<button
-						type="button"
-						class="fulcrum-banner-btn fulcrum-snapshot-btn"
-						title="Capture snapshot"
-						bind:this={snapshotBtnEl}
-						on:click={() => void captureSnapshot()}
-					></button>
 				</div>
 			</div>
 		</div>
@@ -341,11 +404,48 @@
 		</div>
 
 		<section class="fulcrum-section">
-			<h2>Next up</h2>
+			<div class="fulcrum-section-head">
+				<h2 class="fulcrum-section-head__title">Next up</h2>
+				{#if showNewInlineTaskBtn || showNewTaskNoteBtn || showNewNoteFromTemplateBtn}
+					<div class="fulcrum-section-head__actions">
+						{#if showNewNoteFromTemplateBtn}
+							<button
+								type="button"
+								class="fulcrum-text-action"
+								on:click={() =>
+									void plugin.createNewNoteFromTemplateForProject(
+										projectPath,
+										hoverParentLeaf,
+									)}
+							>
+								New note
+							</button>
+						{/if}
+						{#if showNewInlineTaskBtn}
+							<button
+								type="button"
+								class="fulcrum-text-action"
+								on:click={() => plugin.openNewInlineTaskForProject(projectPath)}
+							>
+								New Task
+							</button>
+						{/if}
+						{#if showNewTaskNoteBtn}
+							<button
+								type="button"
+								class="fulcrum-text-action"
+								on:click={() => plugin.openTaskNoteCreateForProject(projectPath)}
+							>
+								New TaskNote
+							</button>
+						{/if}
+					</div>
+				{/if}
+			</div>
 			{#if nextUpMeetings.length === 0 && nextUpListItems.length === 0}
 				<p class="fulcrum-muted">
 					Nothing with a date of today or later (tasks need due or scheduled; notes and meetings use their
-					primary date).
+					primary date). Closed time blocks and meetings that have already ended are omitted.
 				</p>
 			{:else}
 				{#if nextUpMeetings.length > 0}
@@ -371,6 +471,7 @@
 										done={false}
 										showProjectLink={false}
 										showTimelineIcon={true}
+										anchorLeaf={hoverParentLeaf}
 									/>
 								{:else if item.kind === "note" && item.note}
 									<ActivityRow
@@ -378,6 +479,7 @@
 										title={item.note.entryTitle}
 										chips={noteChipsNext(item.note)}
 										kind="note"
+										timelineEmoji={leadingTimelineEmojiFromNoteType(item.note.noteType)}
 										whenClick={() => item.note && openPath(item.note.file.path)}
 										{plugin}
 										hoverParentLeaf={hoverParentLeaf}
@@ -392,31 +494,7 @@
 		</section>
 
 		<section class="fulcrum-section">
-			<div class="fulcrum-section-head">
-				<h2 class="fulcrum-section-head__title">Tasks</h2>
-				{#if showNewInlineTaskBtn || showNewTaskNoteBtn}
-					<div class="fulcrum-section-head__actions">
-						{#if showNewInlineTaskBtn}
-							<button
-								type="button"
-								class="fulcrum-text-action"
-								on:click={() => plugin.openNewInlineTaskForProject(projectPath)}
-							>
-								New Task
-							</button>
-						{/if}
-						{#if showNewTaskNoteBtn}
-							<button
-								type="button"
-								class="fulcrum-text-action"
-								on:click={() => plugin.openTaskNoteCreateForProject(projectPath)}
-							>
-								New TaskNote
-							</button>
-						{/if}
-					</div>
-				{/if}
-			</div>
+			<h2>Tasks</h2>
 			{#if rollup.tasks.length === 0}
 				<p class="fulcrum-muted">No tasks in your indexed sources link to this project.</p>
 			{:else if openTasks.length === 0}
@@ -425,7 +503,13 @@
 				<ul class="fulcrum-task-list fulcrum-task-agenda-list">
 					{#each openTasks as t}
 						<li>
-							<TaskCard plugin={plugin} task={t} done={false} showProjectLink={false} />
+							<TaskCard
+								plugin={plugin}
+								task={t}
+								done={false}
+								showProjectLink={false}
+								anchorLeaf={hoverParentLeaf}
+							/>
 						</li>
 					{/each}
 				</ul>
@@ -449,6 +533,7 @@
 								title={row.title}
 								chips={row.chips}
 								kind={row.kind}
+								timelineEmoji={row.timelineEmoji}
 								whenClick={row.open}
 								{plugin}
 								hoverParentLeaf={hoverParentLeaf}

@@ -1,7 +1,9 @@
 <script lang="ts">
+	import type {WorkspaceLeaf} from "obsidian";
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import type {ProjectRollup} from "../fulcrum/types";
-	import {indexRevision} from "../fulcrum/stores";
+	import {indexRevision, workRelatedOnly} from "../fulcrum/stores";
+	import {buildAreaWorkRelatedMap, filterProjectsWorkRelated} from "../fulcrum/utils/workRelatedProjectFilter";
 	import {
 		buildTimeTrackedModel,
 		fmtHours,
@@ -12,6 +14,7 @@
 	} from "../fulcrum/utils/timeTrackedAnalytics";
 
 	export let plugin: FulcrumHost;
+	export let hoverParentLeaf: WorkspaceLeaf | undefined = undefined;
 
 	const horizonOptions: {id: TimeHorizonId; label: string}[] = [
 		{id: "7d", label: "7 days"},
@@ -33,9 +36,15 @@
 	let loadId = 0;
 
 	$: rev = $indexRevision;
+	$: wrOnly = $workRelatedOnly;
 
 	$: snapshot = plugin.vaultIndex.getSnapshot();
-	$: activeProjects = plugin.vaultIndex.getActiveProjects(plugin.settings);
+	$: areaWorkMap = buildAreaWorkRelatedMap(snapshot.areas);
+	$: activeProjects = filterProjectsWorkRelated(
+		plugin.vaultIndex.getActiveProjects(plugin.settings),
+		wrOnly,
+		areaWorkMap,
+	);
 	$: hasNoAreaProjects = activeProjects.some((p) => !p.areaFile);
 	/** Areas from index + any area linked on active projects (vaults often skip typed “area” notes). */
 	$: areaTiles = (() => {
@@ -83,10 +92,16 @@
 		void rev;
 		void horizon;
 		void excludedAreaPaths;
+		void wrOnly;
+		void areaWorkMap;
 		const id = ++loadId;
 		loading = true;
 		loadError = null;
-		const active = plugin.vaultIndex.getActiveProjects(plugin.settings);
+		const active = filterProjectsWorkRelated(
+			plugin.vaultIndex.getActiveProjects(plugin.settings),
+			wrOnly,
+			areaWorkMap,
+		);
 		void (async (): Promise<void> => {
 			try {
 				const rollups: ProjectRollup[] = [];
@@ -117,10 +132,7 @@
 	}
 
 	function openFile(path: string): void {
-		const f = plugin.app.vault.getAbstractFileByPath(path);
-		if (f && "extension" in f) {
-			void plugin.app.workspace.getLeaf("tab").openFile(f);
-		}
+		plugin.openLinkedNoteFromFulcrum(path, hoverParentLeaf);
 	}
 
 	$: pieGradient =
@@ -133,8 +145,10 @@
 
 <div class="fulcrum-time-dashboard">
 	<p class="fulcrum-time-dashboard__disclaimer fulcrum-muted">
-		Time horizons use file modification dates (and task created dates) as a proxy for when minutes were
-		logged. Meetings use your total-minutes field when it’s set and positive; otherwise the scheduled
+		Task minutes come from your configured tracked field, then <code>totalTimeTracked</code> (Lapse
+		<code>HH:MM:SS</code>), then other totals — not from <code>startTime</code>/<code>endTime</code> span.
+		Horizons use file modification dates (and task created dates) as a proxy for when time was logged.
+		Meetings use your total-minutes field when it’s set and positive; otherwise the scheduled
 		<code>duration</code> (minutes) from the meeting note.
 	</p>
 

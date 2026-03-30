@@ -1,7 +1,8 @@
 import type {App, WorkspaceLeaf} from "obsidian";
-import {VIEW_DASHBOARD, VIEW_PROJECT, VIEW_PROJECT_MANAGER} from "./constants";
+import {VIEW_DASHBOARD, VIEW_PROJECT, VIEW_PROJECT_MANAGER, VIEW_TIMELINE} from "./constants";
 import type {FulcrumSettings} from "./settingsDefaults";
 import type {ProjectManagerViewState} from "../views/ProjectManagerView";
+import type {TimelineViewState} from "../views/TimelineView";
 
 function claimLeaf(app: App, settings: FulcrumSettings): WorkspaceLeaf {
 	if (settings.openViewsIn === "sidebar") {
@@ -16,7 +17,12 @@ function resolveProjectManagerState(initial?: ProjectManagerViewState): ProjectM
 	if (initial.mode === "project" && initial.projectPath) {
 		return {mode: "project", projectPath: initial.projectPath};
 	}
-	if (initial.mode === "kanban" || initial.mode === "calendar" || initial.mode === "time") {
+	if (
+		initial.mode === "areas" ||
+		initial.mode === "kanban" ||
+		initial.mode === "calendar" ||
+		initial.mode === "time"
+	) {
 		return {mode: initial.mode};
 	}
 	return {mode: "dashboard"};
@@ -60,6 +66,45 @@ export async function revealOrCreateTimeTracked(
 	settings: FulcrumSettings,
 ): Promise<void> {
 	await revealOrCreateProjectManager(app, settings, {mode: "time"});
+}
+
+export async function revealOrCreateAreas(
+	app: App,
+	settings: FulcrumSettings,
+): Promise<void> {
+	await revealOrCreateProjectManager(app, settings, {mode: "areas"});
+}
+
+/** Single-day timeline (tasks + meetings); optional persisted focal date. */
+export async function revealOrCreateTimeline(
+	app: App,
+	settings: FulcrumSettings,
+	initial?: TimelineViewState,
+): Promise<void> {
+	const existing = app.workspace.getLeavesOfType(VIEW_TIMELINE)[0];
+	if (existing) {
+		if (initial?.focalDateIso) {
+			await existing.setViewState({
+				type: VIEW_TIMELINE,
+				active: true,
+				state: {focalDateIso: initial.focalDateIso},
+			});
+		} else {
+			await existing.setViewState({
+				type: VIEW_TIMELINE,
+				active: true,
+			});
+		}
+		await app.workspace.revealLeaf(existing);
+		return;
+	}
+	const leaf = claimLeaf(app, settings);
+	await leaf.setViewState({
+		type: VIEW_TIMELINE,
+		active: true,
+		state: initial?.focalDateIso ? {focalDateIso: initial.focalDateIso} : undefined,
+	});
+	await app.workspace.revealLeaf(leaf);
 }
 
 export async function openProjectSummaryLeaf(

@@ -3,7 +3,13 @@
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import type {ProjectLogActivityEntry} from "../fulcrum/projectNote";
 	import type {IndexedMeeting, ProjectRollup} from "../fulcrum/types";
-	import {indexRevision, settingsRevision} from "../fulcrum/stores";
+	import {indexRevision, settingsRevision, workRelatedOnly} from "../fulcrum/stores";
+	import {
+		buildAreaWorkRelatedMap,
+		filterProjectsWorkRelated,
+		meetingPassesWorkFilter,
+		taskPassesWorkFilter,
+	} from "../fulcrum/utils/workRelatedProjectFilter";
 	import {parseList} from "../fulcrum/settingsDefaults";
 	import type {IndexedProject} from "../fulcrum/types";
 	import {buildProjectSidebarCounts, projectReviewIsOverdue} from "../fulcrum/utils/projectSidebarCounts";
@@ -38,13 +44,20 @@
 	$: doneTask = new Set(parseList(plugin.settings.taskDoneStatuses));
 	$: doneProject = (void sRev, new Set(parseList(plugin.settings.projectDoneStatuses)));
 
+	$: areaWorkMap = buildAreaWorkRelatedMap(snapshot.areas);
+	$: onlyWork = $workRelatedOnly;
+
 	$: projectCounts = buildProjectSidebarCounts(snapshot, doneTask);
 
 	/** Active projects with open tasks, upcoming meetings (7d), or overdue review — same signals as the sidebar. */
 	$: attentionProjects = ((): IndexedProject[] => {
 		const out: IndexedProject[] = [];
-		for (const p of snapshot.projects) {
-			if (doneProject.has((p.status ?? "").trim().toLowerCase())) continue;
+		const candidates = filterProjectsWorkRelated(
+			snapshot.projects.filter((p) => !doneProject.has((p.status ?? "").trim().toLowerCase())),
+			onlyWork,
+			areaWorkMap,
+		);
+		for (const p of candidates) {
 			const overdue = projectReviewIsOverdue(p);
 			const c = projectCounts.get(p.file.path);
 			const openTasks = c?.openTasks ?? 0;
@@ -57,15 +70,24 @@
 	})();
 
 	$: tasksDueToday = snapshot.tasks.filter(
-		(t) => !doneTask.has(t.status) && isDueToday(t.dueDate, false),
+		(t) =>
+			!doneTask.has(t.status) &&
+			isDueToday(t.dueDate, false) &&
+			taskPassesWorkFilter(t, snapshot, onlyWork, areaWorkMap),
 	);
 	$: overdueTasks = snapshot.tasks.filter(
-		(t) => !doneTask.has(t.status) && isOverdue(t.dueDate, false),
+		(t) =>
+			!doneTask.has(t.status) &&
+			isOverdue(t.dueDate, false) &&
+			taskPassesWorkFilter(t, snapshot, onlyWork, areaWorkMap),
 	);
 	$: meetingsToday = snapshot.meetings.filter(
-		(m) => m.date?.slice(0, 10) === todayLocalISODate(),
+		(m) =>
+			m.date?.slice(0, 10) === todayLocalISODate() &&
+			meetingPassesWorkFilter(m, snapshot, onlyWork, areaWorkMap),
 	);
 	$: completedThisWeek = snapshot.tasks.filter((t) => {
+		if (!taskPassesWorkFilter(t, snapshot, onlyWork, areaWorkMap)) return false;
 		if (!doneTask.has(t.status) || !t.completedDate) return false;
 		const c = Date.parse(t.completedDate.slice(0, 10));
 		if (Number.isNaN(c)) return false;
@@ -92,6 +114,7 @@
 	$: meetingsByDate = ((): Map<string, IndexedMeeting[]> => {
 		const m = new Map<string, IndexedMeeting[]>();
 		for (const mt of snapshot.meetings) {
+			if (!meetingPassesWorkFilter(mt, snapshot, onlyWork, areaWorkMap)) continue;
 			const key = mt.date?.slice(0, 10) ?? "";
 			if (!key) continue;
 			if (!isDateInUpcomingDays(mt.date, 7)) continue;
@@ -106,14 +129,25 @@
 	})();
 
 	$: todayTasks = snapshot.tasks
-		.filter((t) => !doneTask.has(t.status) && isDueToday(t.dueDate, false))
+		.filter(
+			(t) =>
+				!doneTask.has(t.status) &&
+				isDueToday(t.dueDate, false) &&
+				taskPassesWorkFilter(t, snapshot, onlyWork, areaWorkMap),
+		)
 		.slice(0, 20);
 
 	let aggregatedActivity: ActivityRowModel[] = [];
 
 	$: {
 		void rev;
-		const active = plugin.vaultIndex.getActiveProjects(plugin.settings);
+		void onlyWork;
+		void areaWorkMap;
+		const active = filterProjectsWorkRelated(
+			plugin.vaultIndex.getActiveProjects(plugin.settings),
+			onlyWork,
+			areaWorkMap,
+		);
 		const load = async (): Promise<void> => {
 			const inputs = await Promise.all(
 				active.map(async (p) => {
@@ -133,7 +167,7 @@
 			aggregatedActivity = buildAggregatedActivityRows(valid, {
 				doneTask,
 				openPath: openFile,
-				openTask: (t) => plugin.openIndexedTask(t),
+				openTask: (t) => plugin.openIndexedTask(t, hoverParentLeaf),
 				openProject: (path) => openFile(path),
 				formatTracked: formatTrackedMinutesShort,
 				lastNDaysMs: (plugin.settings.globalActivityDisplayDays ?? 7) * 86400000,
@@ -143,10 +177,7 @@
 	}
 
 	function openFile(path: string): void {
-		const f = plugin.app.vault.getAbstractFileByPath(path);
-		if (f && "extension" in f) {
-			void plugin.app.workspace.getLeaf("tab").openFile(f);
-		}
+		plugin.openLinkedNoteFromFulcrum(path, hoverParentLeaf);
 	}
 
 	function openProjectSummary(path: string): void {
@@ -219,7 +250,13 @@
 		<ul class="fulcrum-task-list fulcrum-task-agenda-list">
 			{#each todayTasks as t}
 				<li>
-					<TaskCard plugin={plugin} task={t} done={doneTask.has(t.status)} showProjectLink={true} />
+					<TaskCard
+						plugin={plugin}
+						task={t}
+						done={doneTask.has(t.status)}
+						showProjectLink={true}
+						anchorLeaf={hoverParentLeaf}
+					/>
 				</li>
 			{/each}
 		</ul>
@@ -263,6 +300,7 @@
 						title={row.title}
 						chips={row.chips}
 						kind={row.kind}
+						timelineEmoji={row.timelineEmoji}
 						whenClick={row.open}
 						{plugin}
 						hoverParentLeaf={hoverParentLeaf}

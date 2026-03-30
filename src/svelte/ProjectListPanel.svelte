@@ -1,7 +1,9 @@
 <script lang="ts">
+	import type {WorkspaceLeaf} from "obsidian";
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import type {FulcrumSettings} from "../fulcrum/settingsDefaults";
-	import {indexRevision, settingsRevision} from "../fulcrum/stores";
+	import {indexRevision, settingsRevision, workRelatedOnly} from "../fulcrum/stores";
+	import {buildAreaWorkRelatedMap, filterProjectsWorkRelated} from "../fulcrum/utils/workRelatedProjectFilter";
 	import {parseList} from "../fulcrum/settingsDefaults";
 	import type {IndexedArea, IndexedProject} from "../fulcrum/types";
 	import {buildProjectSidebarCounts} from "../fulcrum/utils/projectSidebarCounts";
@@ -11,6 +13,8 @@
 	const NONE_KEY = "__none__";
 
 	export let plugin: FulcrumHost;
+	/** When set, opening area notes uses split + companion chrome beside Fulcrum. */
+	export let hoverParentLeaf: WorkspaceLeaf | undefined = undefined;
 
 	/** Set of group keys that are collapsed. Key = `groupBy:label` */
 	let collapsedGroups = new Set<string>();
@@ -32,10 +36,15 @@
 	$: doneProject = (void sRev, new Set(parseList(plugin.settings.projectDoneStatuses)));
 	$: doneTask = (void sRev, new Set(parseList(plugin.settings.taskDoneStatuses)));
 
+	$: areaWorkMap = buildAreaWorkRelatedMap(snapshot.areas);
+	$: onlyWork = $workRelatedOnly;
+
 	/** Per-project counts for sidebar notifications. */
 	$: projectCounts = buildProjectSidebarCounts(snapshot, doneTask);
-	$: activeProjectRaw = snapshot.projects.filter((p) =>
-		!doneProject.has((p.status ?? "").trim().toLowerCase()),
+	$: activeProjectRaw = filterProjectsWorkRelated(
+		snapshot.projects.filter((p) => !doneProject.has((p.status ?? "").trim().toLowerCase())),
+		onlyWork,
+		areaWorkMap,
 	);
 	/** Applied filter (from settings) - used for displayed list. Re-read when settings change. */
 	$: uncheckedStatus = (void sRev, new Set(plugin.settings.projectSidebarFilterUncheckedStatus ?? []));
@@ -72,14 +81,17 @@
 			byPath.set(a.file.path, a.name);
 		}
 		for (const p of activeProjectRaw) {
-			if (p.areaFile) {
-				const label = p.areaName?.trim() || p.areaFile.basename.replace(/\.md$/i, "") || p.areaFile.path;
-				if (!byPath.has(p.areaFile.path)) byPath.set(p.areaFile.path, label);
+			for (const af of p.areaFiles) {
+				const label =
+					(p.areaFiles.length === 1
+						? p.areaName?.trim() || af.basename.replace(/\.md$/i, "")
+						: af.basename.replace(/\.md$/i, "")) || af.path;
+				if (!byPath.has(af.path)) byPath.set(af.path, label);
 			}
 		}
 		const out: { key: string; label: string }[] = [];
 		for (const [path, name] of byPath) out.push({ key: path, label: name });
-		const hasNone = activeProjectRaw.some((p) => !p.areaFile);
+		const hasNone = activeProjectRaw.some((p) => p.areaFiles.length === 0);
 		if (hasNone || out.length === 0) out.push({ key: NONE_KEY, label: "None" });
 		out.sort((a, b) => (a.key === NONE_KEY ? 1 : b.key === NONE_KEY ? -1 : a.label.localeCompare(b.label)));
 		return out;
@@ -94,10 +106,13 @@
 		const statusSetLc = new Set([...uncheckedStatus].map((s) => s.toLowerCase()));
 		return activeProjectRaw.filter((p) => {
 			const statusKey = p.status?.trim() ? p.status : NONE_KEY;
-			const areaKey = p.areaFile?.path ?? NONE_KEY;
+			const areaPass =
+				!areaUnchecked ||
+				(p.areaFiles.length === 0
+					? !uncheckedArea.has(NONE_KEY)
+					: p.areaFiles.some((af) => !uncheckedArea.has(af.path)));
 			const statusPass =
 				!statusUnchecked || !statusSetLc.has(statusKey.toLowerCase());
-			const areaPass = !areaUnchecked || !uncheckedArea.has(areaKey);
 			return statusPass && areaPass;
 		});
 	})();
@@ -125,10 +140,17 @@
 		const list = activeProjectFiltered;
 		const byAreaPath = new Map<string, IndexedProject[]>();
 		for (const p of list) {
-			const key = p.areaFile?.path ?? "__none__";
-			const cur = byAreaPath.get(key) ?? [];
-			cur.push(p);
-			byAreaPath.set(key, cur);
+			if (p.areaFiles.length === 0) {
+				const cur = byAreaPath.get("__none__") ?? [];
+				cur.push(p);
+				byAreaPath.set("__none__", cur);
+			} else {
+				for (const af of p.areaFiles) {
+					const cur = byAreaPath.get(af.path) ?? [];
+					cur.push(p);
+					byAreaPath.set(af.path, cur);
+				}
+			}
 		}
 		const out: AreaGroup[] = [];
 		for (const a of snapshot.areas) {
@@ -146,9 +168,10 @@
 		for (const [, ps] of byAreaPath) {
 			if (!ps.length) continue;
 			const sample = ps[0];
+			const orphanAf = sample?.areaFiles[0];
 			const label =
 				sample?.areaName?.trim() ||
-				sample?.areaFile?.path.split("/").pop()?.replace(/\.md$/i, "") ||
+				orphanAf?.path.split("/").pop()?.replace(/\.md$/i, "") ||
 				"Other";
 			out.push({kind: "orphan", label, projects: sortIndexedProjects(ps, sortBy, sortDir)});
 		}
@@ -182,7 +205,7 @@
 	})();
 
 	async function onGroupByChange(ev: Event): Promise<void> {
-		const v = (ev.currentTarget as HTMLSelectElement).value as "area" | "status";
+		const v = (ev.currentTarget as HTMLSelectElement).value as FulcrumSettings["dashboardActiveProjectsGroupBy"];
 		await plugin.patchSettings({dashboardActiveProjectsGroupBy: v});
 	}
 
@@ -241,10 +264,7 @@
 	}
 
 	function openAreaFile(path: string): void {
-		const f = plugin.app.vault.getAbstractFileByPath(path);
-		if (f && "extension" in f) {
-			void plugin.app.workspace.getLeaf("tab").openFile(f);
-		}
+		plugin.openLinkedNoteFromFulcrum(path, hoverParentLeaf);
 	}
 
 	function groupKey(label: string): string {
@@ -257,9 +277,16 @@
 
 	function toggleGroup(label: string): void {
 		const key = groupKey(label);
-		collapsedGroups = new Set(collapsedGroups);
-		if (collapsedGroups.has(key)) collapsedGroups.delete(key);
-		else collapsedGroups.add(key);
+		const next = new Set(collapsedGroups);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		collapsedGroups = next;
+	}
+
+	function onGroupHeaderKeydown(ev: KeyboardEvent, label: string): void {
+		if (ev.key !== "Enter" && ev.key !== " ") return;
+		ev.preventDefault();
+		toggleGroup(label);
 	}
 </script>
 
@@ -277,6 +304,7 @@
 			>
 				<option value="area">Area</option>
 				<option value="status">Status</option>
+				<option value="none">None</option>
 			</select>
 		</div>
 		<div class="fulcrum-project-list-panel__facet-row">
@@ -290,6 +318,7 @@
 				<option value="launch">Launch date</option>
 				<option value="nextReview">Next review</option>
 				<option value="rank">Rank</option>
+				<option value="name">Name</option>
 			</select>
 			<button
 				type="button"
@@ -379,33 +408,55 @@
 				? "No projects match your search."
 				: "No active projects."}
 		</p>
+	{:else if groupBy === "none"}
+		<ul class="fulcrum-sidebar-project-list">
+			{#each sortIndexedProjects(activeProjectFiltered, sortBy, sortDir) as p (p.file.path)}
+				<li>
+					<ProjectListRow
+						{p}
+						{selectedPath}
+						{onSelectProject}
+						openTaskCount={projectCounts.get(p.file.path)?.openTasks ?? 0}
+						upcomingMeetingCount={projectCounts.get(p.file.path)?.upcomingMeetings ?? 0}
+					/>
+				</li>
+			{/each}
+		</ul>
 	{:else if groupBy === "area"}
 		{#each areaGroups as g}
 			<div class="fulcrum-dashboard__area-group fulcrum-project-list-panel__group">
-				<div class="fulcrum-project-list-panel__group-header">
-					<button
-						type="button"
-						class="fulcrum-project-list-panel__group-toggle"
-						aria-expanded={!isGroupCollapsed(g.label)}
-						aria-label={isGroupCollapsed(g.label) ? "Expand" : "Collapse"}
-						on:click={() => toggleGroup(g.label)}
-					>
-						<span class="fulcrum-project-list-panel__group-chevron" class:fulcrum-project-list-panel__group-chevron--collapsed={isGroupCollapsed(g.label)}>▾</span>
-					</button>
-					{#if g.kind === "area" && g.area}
-						<h3 class="fulcrum-dashboard__area-group-title">
-							<button
-								type="button"
-								class="fulcrum-linklike"
-								on:click={() => openAreaFile(g.area?.file.path ?? "")}
-							>
+				<div
+					class="fulcrum-project-list-panel__group-header fulcrum-project-list-panel__group-header--toggle"
+					role="button"
+					tabindex="0"
+					aria-expanded={!isGroupCollapsed(g.label)}
+					on:click={() => toggleGroup(g.label)}
+					on:keydown={(e) => onGroupHeaderKeydown(e, g.label)}
+				>
+					<div class="fulcrum-project-list-panel__group-header-main">
+						{#if g.kind === "area" && g.area}
+							<h3 class="fulcrum-dashboard__area-group-title fulcrum-project-list-panel__group-title-row">
 								<span class="fulcrum-area-icon">{g.area?.icon ?? "▸"}</span>
-								<span>{g.label}</span>
-							</button>
-						</h3>
-					{:else}
-						<h3 class="fulcrum-dashboard__area-group-title">{g.label}</h3>
-					{/if}
+								<span class="fulcrum-project-list-panel__group-title-text">{g.label}</span>
+								<button
+									type="button"
+									class="fulcrum-project-list-panel__open-area-note"
+									title="Open area note"
+									aria-label="Open area note"
+									on:click|stopPropagation={() => openAreaFile(g.area?.file.path ?? "")}
+								>
+									↗
+								</button>
+							</h3>
+						{:else}
+							<h3 class="fulcrum-dashboard__area-group-title">{g.label}</h3>
+						{/if}
+					</div>
+					<span
+						class="fulcrum-project-list-panel__group-chevron"
+						class:fulcrum-project-list-panel__group-chevron--collapsed={isGroupCollapsed(g.label)}
+						aria-hidden="true"
+					>▾</span>
 				</div>
 				{#if !isGroupCollapsed(g.label)}
 					<ul class="fulcrum-sidebar-project-list">
@@ -427,17 +478,22 @@
 	{:else}
 		{#each statusGroups as sg}
 			<div class="fulcrum-dashboard__area-group fulcrum-project-list-panel__group">
-				<div class="fulcrum-project-list-panel__group-header">
-					<button
-						type="button"
-						class="fulcrum-project-list-panel__group-toggle"
-						aria-expanded={!isGroupCollapsed(sg.label)}
-						aria-label={isGroupCollapsed(sg.label) ? "Expand" : "Collapse"}
-						on:click={() => toggleGroup(sg.label)}
-					>
-						<span class="fulcrum-project-list-panel__group-chevron" class:fulcrum-project-list-panel__group-chevron--collapsed={isGroupCollapsed(sg.label)}>▾</span>
-					</button>
-					<h3 class="fulcrum-dashboard__area-group-title">{sg.label}</h3>
+				<div
+					class="fulcrum-project-list-panel__group-header fulcrum-project-list-panel__group-header--toggle"
+					role="button"
+					tabindex="0"
+					aria-expanded={!isGroupCollapsed(sg.label)}
+					on:click={() => toggleGroup(sg.label)}
+					on:keydown={(e) => onGroupHeaderKeydown(e, sg.label)}
+				>
+					<div class="fulcrum-project-list-panel__group-header-main">
+						<h3 class="fulcrum-dashboard__area-group-title">{sg.label}</h3>
+					</div>
+					<span
+						class="fulcrum-project-list-panel__group-chevron"
+						class:fulcrum-project-list-panel__group-chevron--collapsed={isGroupCollapsed(sg.label)}
+						aria-hidden="true"
+					>▾</span>
 				</div>
 				{#if !isGroupCollapsed(sg.label)}
 					<ul class="fulcrum-sidebar-project-list">

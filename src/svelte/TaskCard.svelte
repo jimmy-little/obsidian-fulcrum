@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type {WorkspaceLeaf} from "obsidian";
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import type {IndexedTask} from "../fulcrum/types";
 	import {Platform} from "obsidian";
@@ -16,6 +17,8 @@
 	export let done: boolean;
 	export let showProjectLink = false;
 	export let showTimelineIcon = false;
+	/** When set (e.g. project summary), open the task note in a split beside Fulcrum. */
+	export let anchorLeaf: WorkspaceLeaf | undefined = undefined;
 
 	let toggling = false;
 	const canToggle = Platform.isDesktop;
@@ -51,7 +54,7 @@
 		.join(" ");
 
 	function openTask(): void {
-		plugin.openIndexedTask(task);
+		plugin.openIndexedTask(task, anchorLeaf);
 	}
 
 	async function runToggle(): Promise<void> {

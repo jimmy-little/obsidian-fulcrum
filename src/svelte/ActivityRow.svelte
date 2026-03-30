@@ -13,6 +13,8 @@
 	export let variant: "default" | "timeline" | "icon" = "default";
 	/** Optional CSS color for timeline node/stem (e.g. project color in aggregated feed). */
 	export let accentColorCss: string | undefined = undefined;
+	/** When set on a note row, replaces the file icon inside the timeline circle. */
+	export let timelineEmoji: string | undefined = undefined;
 
 	let hoverTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -74,7 +76,10 @@
 			style={accentColorCss ? `--fulcrum-row-accent: ${accentColorCss};` : undefined}
 		>
 			<div class="fulcrum-activity-timeline__stem fulcrum-activity-timeline__stem--before"></div>
-			<div class="fulcrum-activity-timeline__node">
+			<div
+				class="fulcrum-activity-timeline__node"
+				class:fulcrum-activity-timeline__node--emoji={kind === "note" && !!timelineEmoji}
+			>
 				{#if kind === "task"}
 					<svg class="fulcrum-activity-timeline__icon" viewBox="0 0 24 24" aria-hidden="true">
 						<path
@@ -121,6 +126,8 @@
 							stroke-linejoin="round"
 						/>
 					</svg>
+				{:else if kind === "note" && timelineEmoji}
+					<span class="fulcrum-activity-timeline__emoji" aria-hidden="true">{timelineEmoji}</span>
 				{:else}
 					<svg class="fulcrum-activity-timeline__icon" viewBox="0 0 24 24" aria-hidden="true">
 						<path

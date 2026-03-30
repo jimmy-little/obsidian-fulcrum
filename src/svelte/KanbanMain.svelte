@@ -1,13 +1,16 @@
 <script lang="ts">
+	import type {WorkspaceLeaf} from "obsidian";
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import type {IndexedArea, IndexedProject} from "../fulcrum/types";
-	import {indexRevision, settingsRevision} from "../fulcrum/stores";
+	import {indexRevision, settingsRevision, workRelatedOnly} from "../fulcrum/stores";
+	import {buildAreaWorkRelatedMap, filterProjectsWorkRelated} from "../fulcrum/utils/workRelatedProjectFilter";
 	import {parseList} from "../fulcrum/settingsDefaults";
 	import {sortIndexedProjects} from "../fulcrum/utils/projectListSort";
 	import {resolveProjectAccentCss} from "../fulcrum/utils/projectVisual";
 	import {formatShortMonthDay, daysUntilCalendar} from "../fulcrum/utils/dates";
 
 	export let plugin: FulcrumHost;
+	export let hoverParentLeaf: WorkspaceLeaf | undefined = undefined;
 
 	let showAddColumnMenu = false;
 	let addColumnMenuEl: HTMLDivElement | undefined;
@@ -22,7 +25,12 @@
 
 	$: sRev = $settingsRevision;
 	$: doneProject = (void sRev, new Set(parseList(plugin.settings.projectDoneStatuses)));
-	$: activeProjects = snapshot.projects.filter((p) => !doneProject.has(p.status));
+	$: areaWorkMap = buildAreaWorkRelatedMap(snapshot.areas);
+	$: activeProjects = filterProjectsWorkRelated(
+		snapshot.projects.filter((p) => !doneProject.has(p.status)),
+		$workRelatedOnly,
+		areaWorkMap,
+	);
 	$: columnBy = (void sRev, plugin.settings.kanbanColumnBy);
 	$: hiddenSet = (void sRev, new Set(columnBy === "status" ? plugin.settings.kanbanHiddenStatus : plugin.settings.kanbanHiddenArea));
 	$: columnOrder = (void sRev, columnBy === "status" ? plugin.settings.kanbanOrderStatus : plugin.settings.kanbanOrderArea);
@@ -38,10 +46,17 @@
 		if (columnBy === "area") {
 			const byAreaPath = new Map<string, IndexedProject[]>();
 			for (const p of activeProjects) {
-				const key = p.areaFile?.path ?? "__none__";
-				const cur = byAreaPath.get(key) ?? [];
-				cur.push(p);
-				byAreaPath.set(key, cur);
+				if (p.areaFiles.length === 0) {
+					const cur = byAreaPath.get("__none__") ?? [];
+					cur.push(p);
+					byAreaPath.set("__none__", cur);
+				} else {
+					for (const af of p.areaFiles) {
+						const cur = byAreaPath.get(af.path) ?? [];
+						cur.push(p);
+						byAreaPath.set(af.path, cur);
+					}
+				}
 			}
 			const out: Column[] = [];
 			for (const a of snapshot.areas) {
@@ -68,12 +83,13 @@
 			for (const [, ps] of byAreaPath) {
 				if (!ps.length) continue;
 				const sample = ps[0];
+				const oa = sample?.areaFiles[0];
 				const label =
 					sample?.areaName?.trim() ||
-					sample?.areaFile?.path.split("/").pop()?.replace(/\.md$/i, "") ||
+					oa?.path.split("/").pop()?.replace(/\.md$/i, "") ||
 					"Other";
 				out.push({
-					id: sample?.areaFile?.path ?? "__other__",
+					id: oa?.path ?? "__other__",
 					label,
 					projects: sortIndexedProjects(ps, plugin.settings.projectSidebarSortBy, plugin.settings.projectSidebarSortDir),
 				});
@@ -220,10 +236,7 @@
 	}
 
 	function openAreaFile(path: string): void {
-		const f = plugin.app.vault.getAbstractFileByPath(path);
-		if (f && "extension" in f) {
-			void plugin.app.workspace.getLeaf("tab").openFile(f);
-		}
+		plugin.openLinkedNoteFromFulcrum(path, hoverParentLeaf);
 	}
 </script>
 

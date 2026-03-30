@@ -8,7 +8,8 @@ import {normalizePath} from "obsidian";
 
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
 
-function extractWikilinksFromText(text: string): string[] {
+/** Extract `[[links]]` from a string (for scanning frontmatter values). */
+export function extractWikilinksFromText(text: string): string[] {
 	const out: string[] = [];
 	let m: RegExpExecArray | null;
 	WIKILINK_RE.lastIndex = 0;
@@ -45,11 +46,12 @@ function parsePeopleFromFrontmatter(
 	return files;
 }
 
-function personFromFile(
+/** Display name and avatar for a people note (frontmatter `name`, else basename). */
+export function getPersonNameAndAvatar(
 	app: App,
 	file: TFile,
 	avatarField: string,
-): IndexedPerson {
+): {name: string; avatarSrc: string | null} {
 	const cache = app.metadataCache.getFileCache(file);
 	const fm = cache?.frontmatter as Record<string, unknown> | undefined;
 	const name =
@@ -57,6 +59,11 @@ function personFromFile(
 		file.basename.replace(/\.md$/i, "");
 	const avatarRaw = fm && avatarField ? (fm[avatarField] as string | undefined) : undefined;
 	const avatarSrc = resolveBannerImageSrc(app, file, avatarRaw);
+	return {name, avatarSrc};
+}
+
+function personFromFile(app: App, file: TFile, avatarField: string): IndexedPerson {
+	const {name, avatarSrc} = getPersonNameAndAvatar(app, file, avatarField);
 	return {file, name, avatarSrc};
 }
 

@@ -6,18 +6,24 @@
 	import KanbanMain from "./KanbanMain.svelte";
 	import CalendarMain from "./CalendarMain.svelte";
 	import TimeTrackedMain from "./TimeTrackedMain.svelte";
+	import AreasMain from "./AreasMain.svelte";
 	import ProjectListPanel from "./ProjectListPanel.svelte";
 	import ProjectSummary from "./ProjectSummary.svelte";
+	import FulcrumLeafToolbar from "./FulcrumLeafToolbar.svelte";
 
 	export let plugin: FulcrumHost;
 	export let hoverParentLeaf: WorkspaceLeaf;
-	export let mainMode: "dashboard" | "project" | "kanban" | "calendar" | "time";
+	export let mainMode: "dashboard" | "areas" | "project" | "kanban" | "calendar" | "time";
 	export let projectPath: string | null;
 	export let onSelectDashboard: () => void;
+	export let onSelectAreas: () => void;
 	export let onSelectProject: (path: string) => void;
 	export let onSelectKanban: () => void;
 	export let onSelectCalendar: () => void;
 	export let onSelectTime: () => void;
+	/** When set (project mode in Project Manager), project summary shows a back control. */
+	export let onBackFromProject: (() => void) | undefined = undefined;
+	export let projectBackTargetLabel = "";
 
 	const PM_LEFT_WIDTH_LS = "fulcrum-pm-left-col-px";
 	const PM_LEFT_MIN = 200;
@@ -41,11 +47,15 @@
 	let pmEl: HTMLDivElement | null = null;
 	let leftWidthPx: number | null = readStoredLeftWidth();
 	let dashboardBtnEl: HTMLButtonElement | null = null;
+	let areasBtnEl: HTMLButtonElement | null = null;
 	let kanbanBtnEl: HTMLButtonElement | null = null;
 	let timeBtnEl: HTMLButtonElement | null = null;
 
 	$: if (dashboardBtnEl && plugin) {
 		setIcon(dashboardBtnEl, "layout-dashboard");
+	}
+	$: if (areasBtnEl && plugin) {
+		setIcon(areasBtnEl, "folder-tree");
 	}
 	$: if (kanbanBtnEl && plugin) {
 		setIcon(kanbanBtnEl, "columns-3");
@@ -151,6 +161,15 @@
 					bind:this={dashboardBtnEl}
 					on:click={onSelectDashboard}
 				></button>
+				<button
+					type="button"
+					class="fulcrum-pm__glyph-btn clickable-icon"
+					class:fulcrum-pm__glyph-btn--active={mainMode === "areas"}
+					aria-label="Areas"
+					title="Areas"
+					bind:this={areasBtnEl}
+					on:click={onSelectAreas}
+				></button>
 				<span class="fulcrum-pm__glyph-spacer" aria-hidden="true"></span>
 				<button
 					type="button"
@@ -185,6 +204,7 @@
 				<div class="fulcrum-pm__left-scroll">
 					<ProjectListPanel
 						{plugin}
+						{hoverParentLeaf}
 						selectedPath={selectedProjectPath}
 						onSelectProject={onSelectProject}
 					/>
@@ -206,38 +226,46 @@
 		{#if mainMode === "dashboard"}
 			<header class="fulcrum-pm__main-head">
 				<h1 class="fulcrum-pm__main-title">Dashboard</h1>
-				<button type="button" class="mod-cta" on:click={() => void plugin.refreshIndex()}>
-					Refresh
-				</button>
+				<FulcrumLeafToolbar {plugin} />
 			</header>
 			<DashboardMain {plugin} hoverParentLeaf={hoverParentLeaf} />
+		{:else if mainMode === "areas"}
+			<header class="fulcrum-pm__main-head">
+				<h1 class="fulcrum-pm__main-title">Areas</h1>
+				<FulcrumLeafToolbar {plugin} />
+			</header>
+			<AreasMain
+				{plugin}
+				hoverParentLeaf={hoverParentLeaf}
+				onSelectProject={onSelectProject}
+			/>
 		{:else if mainMode === "kanban"}
 			<header class="fulcrum-pm__main-head">
 				<h1 class="fulcrum-pm__main-title">Kanban</h1>
-				<button type="button" class="mod-cta" on:click={() => void plugin.refreshIndex()}>
-					Refresh
-				</button>
+				<FulcrumLeafToolbar {plugin} />
 			</header>
-			<KanbanMain {plugin} />
+			<KanbanMain {plugin} {hoverParentLeaf} />
 		{:else if mainMode === "calendar"}
 			<header class="fulcrum-pm__main-head">
 				<h1 class="fulcrum-pm__main-title">Calendar</h1>
-				<button type="button" class="mod-cta" on:click={() => void plugin.refreshIndex()}>
-					Refresh
-				</button>
+				<FulcrumLeafToolbar {plugin} />
 			</header>
-			<CalendarMain {plugin} />
+			<CalendarMain {plugin} {hoverParentLeaf} />
 		{:else if mainMode === "time"}
 			<header class="fulcrum-pm__main-head">
 				<h1 class="fulcrum-pm__main-title">Time tracked</h1>
-				<button type="button" class="mod-cta" on:click={() => void plugin.refreshIndex()}>
-					Refresh
-				</button>
+				<FulcrumLeafToolbar {plugin} />
 			</header>
-			<TimeTrackedMain {plugin} />
+			<TimeTrackedMain {plugin} {hoverParentLeaf} />
 		{:else if projectPath}
 			{#key projectPath}
-				<ProjectSummary {plugin} {projectPath} {hoverParentLeaf} />
+				<ProjectSummary
+					{plugin}
+					{projectPath}
+					{hoverParentLeaf}
+					onBackFromProject={onBackFromProject}
+					backTargetLabel={projectBackTargetLabel}
+				/>
 			{/key}
 		{:else}
 			<p class="fulcrum-muted">Pick a project from the list.</p>
