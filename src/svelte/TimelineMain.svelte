@@ -1,4 +1,5 @@
 <script lang="ts">
+	import {onMount} from "svelte";
 	import type {WorkspaceLeaf} from "obsidian";
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import {indexRevision, settingsRevision, workRelatedOnly} from "../fulcrum/stores";
@@ -9,7 +10,11 @@
 	} from "../fulcrum/utils/workRelatedProjectFilter";
 	import {parseList} from "../fulcrum/settingsDefaults";
 	import {addDaysIso, todayLocalISODate} from "../fulcrum/utils/dates";
-	import {formatDayNum, formatDayShort} from "../fulcrum/utils/calendarGrid";
+	import {
+		formatDayNum,
+		formatDayShort,
+		timeGridNowLineTopPercent,
+	} from "../fulcrum/utils/calendarGrid";
 	import {
 		taskToCalendarEvent,
 		meetingToCalendarEvent,
@@ -22,6 +27,16 @@
 	/** YYYY-MM-DD */
 	export let focalDateIso: string;
 	export let onFocalIsoChange: (iso: string) => void;
+
+	let nowLineTick = 0;
+	onMount(() => {
+		const id = window.setInterval(() => {
+			nowLineTick += 1;
+		}, 90_000);
+		return () => window.clearInterval(id);
+	});
+
+	$: nowLineTopPct = (void nowLineTick, timeGridNowLineTopPercent());
 
 	let snapshot = plugin.vaultIndex.getSnapshot();
 	$: rev = $indexRevision;
@@ -199,6 +214,13 @@
 							<span class="fulcrum-calendar__timed-event-title">{e.title}</span>
 						</button>
 					{/each}
+					{#if isToday}
+						<div
+							class="fulcrum-calendar__now-line"
+							style="top: {nowLineTopPct}%"
+							aria-hidden="true"
+						></div>
+					{/if}
 				</div>
 			</div>
 		</div>

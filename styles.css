@@ -3187,6 +3187,24 @@ button.fulcrum-task-card__note-type:focus-visible {
 	pointer-events: auto;
 }
 
+.fulcrum-calendar__now-line {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 0;
+	margin-top: -1px;
+	border-top: 2px solid var(--color-red, #e03131);
+	pointer-events: none;
+	z-index: 6;
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--background-primary) 85%, transparent);
+}
+
+.theme-dark .fulcrum-calendar__now-line {
+	border-top-color: var(--color-orange, #ff922b);
+	box-shadow: 0 0 6px color-mix(in srgb, var(--color-orange, #ff922b) 45%, transparent);
+}
+
 .fulcrum-calendar__timed-event {
 	--fulcrum-event-accent: var(--interactive-accent);
 	position: absolute;

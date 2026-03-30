@@ -107,3 +107,13 @@ export function isWorkWeekDay(d: Date): boolean {
 	const day = d.getDay();
 	return day >= 1 && day <= 5;
 }
+
+/** Fractional minutes from local midnight (0–1440). */
+export function localMinutesSinceMidnight(d: Date = new Date()): number {
+	return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+}
+
+/** Top position % for a “current time” line in the 24h day grid. */
+export function timeGridNowLineTopPercent(d: Date = new Date()): number {
+	return (localMinutesSinceMidnight(d) / (24 * 60)) * 100;
+}

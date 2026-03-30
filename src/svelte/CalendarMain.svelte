@@ -1,4 +1,5 @@
 <script lang="ts">
+	import {onMount} from "svelte";
 	import type {WorkspaceLeaf} from "obsidian";
 	import type {FulcrumHost} from "../fulcrum/pluginBridge";
 	import type {IndexedMeeting, IndexedTask} from "../fulcrum/types";
@@ -20,8 +21,10 @@
 		gridStartDate,
 		daysInView,
 		isWorkWeekDay,
+		timeGridNowLineTopPercent,
 		type CalendarViewMode,
 	} from "../fulcrum/utils/calendarGrid";
+	import {todayLocalISODate} from "../fulcrum/utils/dates";
 	import {
 		taskToCalendarEvent,
 		meetingToCalendarEvent,
@@ -31,6 +34,17 @@
 	import {resolveProjectAccentCss} from "../fulcrum/utils/projectVisual";
 	export let plugin: FulcrumHost;
 	export let hoverParentLeaf: WorkspaceLeaf | undefined = undefined;
+
+	/** Bumps on an interval so the “now” line position stays current. */
+	let nowLineTick = 0;
+	onMount(() => {
+		const id = window.setInterval(() => {
+			nowLineTick += 1;
+		}, 90_000);
+		return () => window.clearInterval(id);
+	});
+
+	$: nowLineTopPct = (void nowLineTick, timeGridNowLineTopPercent());
 
 	let focalDate = new Date();
 	focalDate.setHours(0, 0, 0, 0);
@@ -379,6 +393,13 @@
 									<span class="fulcrum-calendar__timed-event-title">{e.title}</span>
 								</button>
 							{/each}
+							{#if iso === todayLocalISODate()}
+								<div
+									class="fulcrum-calendar__now-line"
+									style="top: {nowLineTopPct}%"
+									aria-hidden="true"
+								></div>
+							{/if}
 						</div>
 					</div>
 				{/each}
